@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from preprocess import TextEmbedder, TextTokenizer
-from load_data import read_data
+from preprocess import TextTokenizer
+from load_data import read_data, load_glove_embeddings
 
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
@@ -12,33 +12,35 @@ from tensorflow import keras
 from tensorflow.keras import layers, Model, callbacks
 
 
-data = read_data("sentence")
-
-# data["simple"] = data["simple"].apply(tokenizer.tokenize_sent)
-# data["normal"] = data["normal"].apply(tokenizer.tokenize_sent)
-
 max_sent_len = 100
 embedding_dim = 50
+
+data = read_data("sentence")
+
+tokenizer = TextTokenizer(max_sent_len)
+
+data.simple = data.simple.apply(tokenizer.tokenize_sent)
+data.normal = data.normal.apply(tokenizer.tokenize_sent)
 
 print("max sent len:", max_sent_len)
 print("fraction of sentences truncated:", data["normal"].apply(lambda x: len(x) > max_sent_len).mean())
 
+data.simple = data.simple.apply(tokenizer.pad_and_truncate)
+data.normal = data.normal.apply(tokenizer.pad_and_truncate)
 
 
-embeddings = {}
-glove_path = "data/glove_6B/glove.6B.{}d.txt".format(embedding_dim)
-with open(glove_path, "r") as f:
-    for line in f:
-        word, coefs = line.split(maxsplit=1)
-        coefs = np.fromstring(coefs, "f", sep=" ")
-        embeddings[word] = coefs
-print("Glove embeddings: Found %s word vectors" % len(embeddings))
+X = np.concatenate([
+        data.normal.to_list(), 
+        data.simple.to_list()], axis=0, dtype=np.str_)
+Y = np.concatenate([np.ones(len(data.normal)), np.zeros(len(data.simple))], axis=0)
+
+
+embeddings = load_glove_embeddings(embedding_dim)
 
 vocab = list(embeddings.keys())
-
-tokenizer = TextTokenizer()
 vectorizer = tf.keras.layers.TextVectorization(
-    split=tokenizer.tokenize_sent,
+    standardize=None,
+    split=None,
     output_mode='int',
     output_sequence_length=max_sent_len,
     vocabulary=vocab)
@@ -53,7 +55,7 @@ for index,word in enumerate(vocab):
         embedding_matrix[index] = embedding_vector
 
 
-inpt = layers.Input((1,), dtype="string")
+inpt = layers.Input((max_sent_len,), dtype="string")
 # convert to string to sequence of ints
 x = vectorizer(inpt)
 
@@ -61,7 +63,7 @@ x = vectorizer(inpt)
 x = layers.Embedding(
     len(vocab)+2,
     embedding_dim,
-    embedding_initializer=keras.initializers.ConstantInitializer(embedding_matrix),
+    embeddings_initializer=keras.initializers.Constant(embedding_matrix),
     trainable=False,
 )(x)
 
@@ -78,16 +80,11 @@ x = layers.Activation('sigmoid')(x)
 model = Model(inpt, x)
 
 
-X = np.concatenate([data.normal, data.simple], axis=0)
-Y = np.concatenate([np.ones(len(data.normal)), np.zeros(len(data.simple))], axis=0)
-
 X, x_test, Y, y_test = train_test_split(X, Y, test_size=0.2)
 x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=0.1)
 
-model = lstm1(x_train[0].shape)
-
 model.compile(
-    optimizer=keras.optimizers.Adam(lr=0.001),
+    optimizer=keras.optimizers.Adam(learning_rate=0.001),
     loss="binary_crossentropy",
     metrics=["binary_accuracy"],
 )
@@ -103,7 +100,7 @@ model.fit(
     x_train, y_train,
     validation_data=(x_val, y_val),
     batch_size=16,
-    epochs=2,
+    epochs=100,
     callbacks=callback_lst
 )
 
