@@ -1,19 +1,21 @@
 import numpy as np
 import pandas as pd
 
-from preprocess import TextTokenizer
-from load_data import read_data, load_glove_embeddings
-
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
-
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, Model, callbacks
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+from preprocess import TextTokenizer
+from load_data import read_data, load_glove_embeddings
 
 
 max_sent_len = 100
 embedding_dim = 50
+
+print("Loading data...")
 
 data = read_data("sentence")
 
@@ -25,16 +27,19 @@ data.normal = data.normal.apply(tokenizer.tokenize_sent)
 print("max sent len:", max_sent_len)
 print("fraction of sentences truncated:", data["normal"].apply(lambda x: len(x) > max_sent_len).mean())
 
-data.simple = data.simple.apply(tokenizer.pad_and_truncate)
-data.normal = data.normal.apply(tokenizer.pad_and_truncate)
+X_normal = pad_sequences(
+            data.normal.to_list(), 
+            maxlen=max_sent_len, 
+            dtype=np.str_, truncating="post")
+X_simple = pad_sequences(
+            data.simple.to_list(), 
+            maxlen=max_sent_len, 
+            dtype=np.str_, truncating="post")
 
-
-X = np.concatenate([
-        data.normal.to_list(), 
-        data.simple.to_list()], axis=0, dtype=np.str_)
+X = np.concatenate([X_normal, X_simple], axis=0, dtype=np.str_)
 Y = np.concatenate([np.ones(len(data.normal)), np.zeros(len(data.simple))], axis=0)
 
-
+print("Loading embeddings...")
 embeddings = load_glove_embeddings(embedding_dim)
 
 vocab = list(embeddings.keys())
@@ -54,6 +59,8 @@ for index,word in enumerate(vocab):
         # This includes the representation for "padding" and "OOV"
         embedding_matrix[index] = embedding_vector
 
+
+print("Building model...")
 
 inpt = layers.Input((max_sent_len,), dtype="string")
 # convert to string to sequence of ints
@@ -80,6 +87,7 @@ x = layers.Activation('sigmoid')(x)
 model = Model(inpt, x)
 
 
+print("Building and training...")
 X, x_test, Y, y_test = train_test_split(X, Y, test_size=0.2)
 x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size=0.1)
 
@@ -104,6 +112,7 @@ model.fit(
     callbacks=callback_lst
 )
 
+print("\nEvaluating...")
 print(model.evaluate(x_test, y_test))
 
 
