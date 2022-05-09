@@ -28,12 +28,12 @@ print("max sent len:", max_sent_len)
 print("fraction of sentences truncated:", data["normal"].apply(lambda x: len(x) > max_sent_len).mean())
 
 X_normal = pad_sequences(
-            data.normal.to_list(), 
-            maxlen=max_sent_len, 
+            data.normal.to_list(),
+            maxlen=max_sent_len,
             dtype=np.str_, truncating="post")
 X_simple = pad_sequences(
-            data.simple.to_list(), 
-            maxlen=max_sent_len, 
+            data.simple.to_list(),
+            maxlen=max_sent_len,
             dtype=np.str_, truncating="post")
 
 X = np.concatenate([X_normal, X_simple], axis=0, dtype=np.str_)
