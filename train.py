@@ -8,7 +8,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, Model, callbacks
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-from preprocess import TextTokenizer
+from preprocess import TextTokenizer, TextVectorizer
 from load_data import read_data, load_glove_embeddings
 
 
@@ -39,36 +39,30 @@ X_simple = pad_sequences(
 X = np.concatenate([X_normal, X_simple], axis=0, dtype=np.str_)
 Y = np.concatenate([np.ones(len(data.normal)), np.zeros(len(data.simple))], axis=0)
 
-print("Loading embeddings...")
+print("Loading embeddings & vectorizing data...")
 embeddings = load_glove_embeddings(embedding_dim)
 
 vocab = list(embeddings.keys())
-vectorizer = tf.keras.layers.TextVectorization(
-    standardize=None,
-    split=None,
-    output_mode='int',
-    output_sequence_length=max_sent_len,
-    vocabulary=vocab)
+vectorizer = TextVectorizer(vocab)
+
+# convert strings to ints
+X = vectorizer.vectorize(X)
 
 # Prepare embedding matrix
-embedding_matrix = np.zeros((len(vocab)+2, embedding_dim))
-for index,word in enumerate(vocab):
+embedding_matrix = np.zeros((vectorizer.index_size, embedding_dim))
+for word,index in vectorizer.word_index.items():
     embedding_vector = embeddings.get(word)
-    if embedding_vector is not None:
-        # Words not found in embedding index will be all-zeros.
-        # This includes the representation for "padding" and "OOV"
-        embedding_matrix[index] = embedding_vector
+    embedding_matrix[index] = embedding_vector
 
 
 print("Building model...")
 
-inpt = layers.Input((max_sent_len,), dtype="string")
-# convert to string to sequence of ints
-x = vectorizer(inpt)
+inpt = layers.Input((max_sent_len,), dtype=X.dtype)
+x = inpt
 
 # convert to embedded vectors
 x = layers.Embedding(
-    len(vocab)+2,
+    vectorizer.index_size,
     embedding_dim,
     embeddings_initializer=keras.initializers.Constant(embedding_matrix),
     trainable=False,
