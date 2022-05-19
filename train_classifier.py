@@ -8,52 +8,14 @@ from tensorflow import keras
 from tensorflow.keras import layers, Model, callbacks
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-from preprocess import TextTokenizer, TextVectorizer
-from load_data import read_data, load_glove_embeddings
+from preprocess import load_preprocessed_sentence_data
 
 
 max_sent_len = 100
 embedding_dim = 50
 
-print("Loading data...")
-
-data = read_data("sentence")
-
-tokenizer = TextTokenizer(max_sent_len)
-
-data.simple = data.simple.apply(tokenizer.tokenize_sent)
-data.normal = data.normal.apply(tokenizer.tokenize_sent)
-
-print("max sent len:", max_sent_len)
-print("fraction of sentences truncated:", data["normal"].apply(lambda x: len(x) > max_sent_len).mean())
-
-X_normal = pad_sequences(
-            data.normal.to_list(),
-            maxlen=max_sent_len,
-            dtype=np.str_, truncating="post")
-X_simple = pad_sequences(
-            data.simple.to_list(),
-            maxlen=max_sent_len,
-            dtype=np.str_, truncating="post")
-
-X = np.concatenate([X_normal, X_simple], axis=0, dtype=np.str_)
-Y = np.concatenate([np.ones(len(data.normal)), np.zeros(len(data.simple))], axis=0)
-
-print("Loading embeddings & vectorizing data...")
-embeddings = load_glove_embeddings(embedding_dim)
-
-vocab = list(embeddings.keys())
-vectorizer = TextVectorizer(vocab)
-
-# convert strings to ints
-X = vectorizer.vectorize(X)
-
-# Prepare embedding matrix
-embedding_matrix = np.zeros((vectorizer.index_size, embedding_dim))
-for word,index in vectorizer.word_index.items():
-    embedding_vector = embeddings.get(word)
-    embedding_matrix[index] = embedding_vector
-
+X, Y, embedding_matrix = load_preprocessed_sent_data(max_sent_len, embedding_dim, 
+                                drop_equal=True, target="label")
 
 print("Building model...")
 
@@ -96,6 +58,7 @@ model.summary()
 callback_lst = [
     callbacks.EarlyStopping(patience=10, restore_best_weights=True, verbose=1),
     callbacks.ReduceLROnPlateau(patience=5, factor=0.1, verbose=1),
+    callbacks.ModelCheckpoint("classifier.h5", save_best_only=True)
 ]
 
 model.fit(
@@ -110,7 +73,3 @@ print("\nEvaluating...")
 print(model.evaluate(x_test, y_test))
 
 
-
-
-if __name__ == "__main__":
-    main()

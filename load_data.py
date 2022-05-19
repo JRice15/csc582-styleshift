@@ -6,7 +6,6 @@ def read_data_tsv(filename, cols=("title", "para", "text")):
     df.columns = cols
     return df
 
-
 def read_data(kind="sentence"):
     """
     args:
@@ -19,7 +18,6 @@ def read_data(kind="sentence"):
     normal = normal.drop(columns=["title", "para"])
     df = pd.concat([simple, normal], axis=1)
     return df
-
 
 def load_glove_embeddings(embedding_dim):
     embeddings = {}
