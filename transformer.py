@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow_probability
 
+from const import MAX_SENT_LEN
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
@@ -49,8 +50,8 @@ def create_padding_mask(seq):
 # the third tokens will be used and so on.
 def create_look_ahead_mask(size):
     n = int(size * (size+1) / 2)
-    mask = tensorflow_probability.math.fill_triangular(tf.ones((n,), dtype=tf.int32), upper=False)
-
+    mask = tensorflow_probability.math.fill_triangular(tf.ones((n,), dtype=tf.float32), upper=False)
+    return mask
 
 ### Point wise feed forward network
 
@@ -77,7 +78,7 @@ class EncoderLayer(tf.keras.layers.Layer):
     self.dropout2 = tf.keras.layers.Dropout(rate)
 
   def call(self, x, training, mask):
-    attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
+    attn_output = self.mha(x, x, x, mask, training=training)  # (batch_size, input_seq_len, d_model)
     attn_output = self.dropout1(attn_output, training=training)
     out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
 
@@ -102,15 +103,13 @@ class DecoderLayer(tf.keras.layers.Layer):
     self.dropout2 = tf.keras.layers.Dropout(rate)
     self.dropout3 = tf.keras.layers.Dropout(rate)
 
-  def call(self, x, enc_output, training,
-           look_ahead_mask, padding_mask):
+  def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
     # enc_output.shape == (batch_size, input_seq_len, d_model)
-    attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
+    attn1, attn1_weights = self.mha1(x, x, x, look_ahead_mask, training=training, return_attention_scores=True)  # (batch_size, target_seq_len, d_model)
     attn1 = self.dropout1(attn1, training=training)
     out1 = self.layernorm1(attn1 + x)
 
-    attn2, attn_weights_block2 = self.mha2(
-        enc_output, enc_output, out1, padding_mask)  # (batch_size, target_seq_len, d_model)
+    attn2, attn2_weights = self.mha2(out1, enc_output, enc_output, padding_mask, training=training, return_attention_scores=True)  # (batch_size, target_seq_len, d_model)
     attn2 = self.dropout2(attn2, training=training)
     out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
 
@@ -118,7 +117,7 @@ class DecoderLayer(tf.keras.layers.Layer):
     ffn_output = self.dropout3(ffn_output, training=training)
     out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
 
-    return out3, attn_weights_block1, attn_weights_block2
+    return out3, attn1_weights, attn2_weights
 
 
 ### Encoder
@@ -132,7 +131,7 @@ class Encoder(tf.keras.layers.Layer):
     self.num_layers = num_layers
 
     self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model)
-    self.pos_encoding = positional_encoding(MAX_TOKENS, self.d_model)
+    self.pos_encoding = positional_encoding(MAX_SENT_LEN, self.d_model)
 
     self.enc_layers = [
         EncoderLayer(d_model=d_model, num_heads=num_heads, dff=dff, rate=rate)
@@ -166,7 +165,7 @@ class Decoder(tf.keras.layers.Layer):
     self.num_layers = num_layers
 
     self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-    self.pos_encoding = positional_encoding(MAX_TOKENS, d_model)
+    self.pos_encoding = positional_encoding(MAX_SENT_LEN, d_model)
 
     self.dec_layers = [
         DecoderLayer(d_model=d_model, num_heads=num_heads, dff=dff, rate=rate)
@@ -186,11 +185,10 @@ class Decoder(tf.keras.layers.Layer):
     x = self.dropout(x, training=training)
 
     for i in range(self.num_layers):
-      x, block1, block2 = self.dec_layers[i](x, enc_output, training,
-                                             look_ahead_mask, padding_mask)
+      x, attn1_weights, attn2_weights = self.dec_layers[i](x, enc_output, training, look_ahead_mask, padding_mask)
 
-      attention_weights[f'decoder_layer{i+1}_block1'] = block1
-      attention_weights[f'decoder_layer{i+1}_block2'] = block2
+      attention_weights[f"decoder_layer{i}_attn1_weights"] = attn1_weights
+      attention_weights[f"decoder_layer{i}_attn2_weights"] = attn2_weights
 
     # x.shape == (batch_size, target_seq_len, d_model)
     return x, attention_weights
@@ -222,12 +220,11 @@ class Transformer(tf.keras.Model):
     enc_output = self.encoder(inp, training, padding_mask)  # (batch_size, inp_seq_len, d_model)
 
     # dec_output.shape == (batch_size, tar_seq_len, d_model)
-    dec_output, attention_weights = self.decoder(
-        tar, enc_output, training, look_ahead_mask, padding_mask)
+    dec_output, attn_weights = self.decoder(tar, enc_output, training, look_ahead_mask, padding_mask)
 
     final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
 
-    return final_output, attention_weights
+    return final_output, attn_weights
 
   def create_masks(self, inp, tar):
     # Encoder padding mask (Used in the 2nd attention block in the decoder too.)
@@ -242,8 +239,8 @@ class Transformer(tf.keras.Model):
 
     return padding_mask, look_ahead_mask
 
-  @tf.function(experimental_relax_shapes=True)
   def train_step(self, data):
+    inp, tar = data
     tar_inp = tar[:, :-1]
     tar_real = tar[:, 1:]
 
@@ -258,5 +255,25 @@ class Transformer(tf.keras.Model):
     return {m.name: m.result() for m in self.metrics}
 
 
-# Portuguese is used as the input language and English is the target language.
-
+# The target is divided into tar_inp and tar_real. tar_inp is passed as an input 
+# to the decoder. `tar_real` is that same input shifted by 1: At each location in 
+# `tar_input`, `tar_real` contains the  next token that should be predicted.
+# 
+# For example, `sentence = 'SOS A lion in the jungle is sleeping EOS'` becomes:
+# 
+# * `tar_inp =  'SOS A lion in the jungle is sleeping'`
+# * `tar_real = 'A lion in the jungle is sleeping EOS'`
+# 
+# A transformer is an auto-regressive model: it makes predictions one part at a 
+# time, and uses its output so far to decide what to do next.
+# 
+# During training this example uses teacher-forcing (like in the [text generation 
+# tutorial](https://www.tensorflow.org/text/tutorials/text_generation)). Teacher 
+# forcing is passing the true output to the next time step regardless of what the 
+# model predicts at the current time step.
+# 
+# As the model predicts each token, *self-attention* allows it to look at the 
+# previous tokens in the input sequence to better predict the next token.
+# 
+# To prevent the model from peeking at the expected output the model uses a 
+# look-ahead mask.
