@@ -4,7 +4,9 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+
 from preprocess import TextTokenizer, TextVectorizer
+from const import MAX_SENT_LEN, PADDING_TOKEN, START_TOKEN, END_TOKEN, MAX_WORD_LEN
 
 
 def read_data_tsv(filename, cols=("title", "para", "text")):
@@ -43,21 +45,20 @@ def make_embedding_matrix(embedding_dim, vectorizer):
     # Prepare embedding matrix
     embedding_matrix = np.zeros((vectorizer.vocab_size, embedding_dim))
     for word,index in vectorizer.word_to_index.items():
-        embedding_vector = embeddings.get(word)
-        embedding_matrix[index] = embedding_vector
+        vec = embeddings.get(word)
+        if vec is not None:
+            embedding_matrix[index] = vec
     
     return embedding_matrix
 
 
 
-def load_preprocessed_sent_data(max_sent_len, embedding_dim, target="label", 
-        drop_equal=False):
+def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_tokens=False):
     """
     args:
-        max_sent_len
-        embedding_dim
-        drop_equal: whether to drop sentences that are the same
         target: "label" or "simple"
+        drop_equal: bool, whether to drop sentences that are the same
+        start_end_tokens: bool, whether to include a start and end token at the beginning at end of each sentence
     returns:
         tuple(x_train, y_train, x_val, y_val, x_test, y_test)
         vectorizer
@@ -65,36 +66,53 @@ def load_preprocessed_sent_data(max_sent_len, embedding_dim, target="label",
     print("Loading data...")
     data = read_data("sentence")
 
-    tokenizer = TextTokenizer()
+    tokenizer = TextTokenizer(use_start_end_tokens=start_end_tokens)
 
     if drop_equal:
         orig_len = len(data)
         data = data[data.simple != data.normal]
         print(orig_len - len(data), "examples dropped for being the same.", len(data), "remain")
 
+    # tokenize
     data.simple = data.simple.apply(tokenizer.tokenize_sent)
     data.normal = data.normal.apply(tokenizer.tokenize_sent)
 
-    print("max sent len:", max_sent_len)
-    print("fraction of sentences truncated:", data["normal"].apply(lambda x: len(x) > max_sent_len).mean())
+    orig_examples = len(data)
+    data = data[(data.normal.apply(len) <= MAX_SENT_LEN) & (data.simple.apply(len) <= MAX_SENT_LEN)]
+    print("fraction of sentences dropped for length:", (orig_examples - len(data)) / orig_examples)
 
+    print("example tokenized:")
+    print(" ", data.normal.iloc[8192])
+
+    str_dtype = np.dtype("U" + str(MAX_WORD_LEN))
     X_normal = pad_sequences(
                 data.normal.to_list(),
-                maxlen=max_sent_len,
-                dtype=np.str_, truncating="post")
+                maxlen=MAX_SENT_LEN,
+                dtype=str_dtype, # max 50 letters in a word 
+                value=PADDING_TOKEN,
+            )
     X_simple = pad_sequences(
                 data.simple.to_list(),
-                maxlen=max_sent_len,
-                dtype=np.str_, truncating="post")
+                maxlen=MAX_SENT_LEN,
+                dtype=str_dtype,
+                value=PADDING_TOKEN,
+            )
+
+    print("example padded:")
+    print(" ", X_normal[8192])
 
     vectorizer = TextVectorizer()
+
+    print("example vectorized:")
+    print(" ", vectorizer.vectorize([X_normal[8192]]))
 
     # 20% testing, ~10% validation
     train_inds, test_inds = train_test_split(np.arange(len(X_normal)), test_size=0.2, random_state=1)
     train_inds, val_inds = train_test_split(train_inds, test_size=0.1, random_state=1)
 
-    results = []
+    datasets = []
 
+    set_names = ["x_train", "y_train", "x_val", "y_val", "x_test", "y_test"]
     for indexes in (train_inds, val_inds, test_inds):
 
         if target == "label":
@@ -111,9 +129,15 @@ def load_preprocessed_sent_data(max_sent_len, embedding_dim, target="label",
         else:
             raise ValueError(f"unknown target argument '{target}'")
         
-        results += [X, Y]
+        datasets += [X, Y]
 
-    results = [tf.constant(x, dtype=tf.int32) for x in results]
+    print("dataset sizes:")
+    for name, ds in zip(set_names, datasets):
+        print(" ", name, ds.shape)
 
-    return tuple(results), vectorizer
+    print("OOV rate when vectorizing data:", vectorizer.oov_rate)
+
+    datasets = [tf.constant(x, dtype=tf.int32) for x in datasets]
+
+    return tuple(datasets), vectorizer
 

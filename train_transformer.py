@@ -1,6 +1,7 @@
 import logging
 import time
 import argparse
+from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,22 +13,42 @@ from const import MAX_SENT_LEN
 from load_data import load_preprocessed_sent_data
 from transformer import Transformer
 
-# To keep this example small and relatively fast, the values for `num_layers, 
-# d_model, dff` have been reduced. 
-# The base model described in the [paper](https://arxiv.org/abs/1706.03762) used: 
-# `num_layers=6, d_model=512, dff=2048`.
+"""
+Vaswani et al https://arxiv.org/pdf/1706.03762.pdf
+Orig paper params:
+  layers  6
+  d_model 512
+  d_ff    2048
+  n heads 8
+  d_k     64
+  dropout 0.1
+  e_ls    0.1 (label smoothing)
+"""
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--batchsize",type=int,default=128) 
-parser.add_argument("--n-layers",type=int,default=4)
-parser.add_argument("--d-model",type=int,default=128,help="hidden units in model")
+
+# model params
+parser.add_argument("--n-layers",type=int,default=2)
+parser.add_argument("--d-model",type=int,default=128,help="dimension units in model")
 parser.add_argument("--d-ff",type=int,default=512,help="hidden units in feedforward nets")
-parser.add_argument("--n-heads",type=int,default=8,help="number of attention heads")
+parser.add_argument("--n-heads",type=int,default=4,help="number of attention heads")
+parser.add_argument("--d-key",type=int,default=64,help="dimension of key in attention")
 parser.add_argument("--dropout",type=int,default=0.1)
+# parser.add_argument("--label-smoothing",type=float,default=0.1,help="e_ls in paper")
+
+# training params
+parser.add_argument("--batchsize",type=int,default=64) 
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=5)
 ARGS = parser.parse_args()
 
+pprint(vars(ARGS))
+
+
+### Dataset
+
+dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, start_end_tokens=True)
+x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 
 # Use the Adam optimizer with a custom learning rate scheduler according to the 
@@ -53,13 +74,19 @@ optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
 
 ### Loss and metrics
 
-# Since the target sequences are padded, it is important to apply a padding mask 
-# when calculating the loss.
 
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
     from_logits=True, reduction='none')
 
-@tf.function
+loss_spec = [
+    tf.TensorSpec(shape=(None,MAX_SENT_LEN-1), dtype=tf.int32),
+    tf.TensorSpec(shape=(None,MAX_SENT_LEN-1,vectorizer.vocab_size), dtype=tf.float32),    
+]
+
+# Since the target sequences are padded, it is important to apply a padding mask 
+# when calculating the loss.
+
+@tf.function(input_signature=loss_spec)
 def loss_function(real, pred):
   mask = tf.math.logical_not(tf.math.equal(real, 0))
   loss_ = loss_object(real, pred)
@@ -70,43 +97,44 @@ def loss_function(real, pred):
 
 @tf.function
 def accuracy_function(real, pred):
-  accuracies = tf.equal(real, tf.argmax(pred, axis=2))
+  real = tf.cast(real, tf.int32)
+  accuracies = tf.equal(real, tf.argmax(pred, axis=2, output_type=tf.int32))
 
   mask = tf.math.logical_not(tf.math.equal(real, 0))
   accuracies = tf.math.logical_and(mask, accuracies)
 
   accuracies = tf.cast(accuracies, dtype=tf.float32)
   mask = tf.cast(mask, dtype=tf.float32)
-  return tf.reduce_sum(accuracies)/tf.reduce_sum(mask)
+  return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
 
-
-
-dataset, vectorizer = load_preprocessed_sent_data(MAX_SENT_LEN, 50, target="simple", drop_equal=True)
-
-x_train, y_train, x_val, y_val, x_test, y_test = dataset
+accuracy_function.__name__ = "my_acc"
 
 ### Training and checkpointing
 
 model = Transformer(
     num_layers=ARGS.n_layers,
-    d_model=ARGS.d_model,
     num_heads=ARGS.n_heads,
-    dff=ARGS.d_ff,
-    input_vocab_size=vectorizer.vocab_size,
-    target_vocab_size=vectorizer.vocab_size,
+    d_model=ARGS.d_model,
+    d_ff=ARGS.d_ff,
+    d_key=ARGS.d_key,
+    vocab_size=vectorizer.vocab_size,
     rate=ARGS.dropout)
 
 
 # call with sample batch to build model shapes
 sample_x = x_train[:ARGS.batchsize]
 sample_y = y_train[:ARGS.batchsize, :-1]
-print(sample_x.shape, sample_y.shape)
-print(sample_x.dtype, sample_y.dtype)
 print("Building...")
-model([sample_x, sample_y])
+output, attn_weights = model([sample_x, sample_y])
+print("batch shapes:")
+print(" ", sample_x.shape, sample_y.shape)
+print(" ", sample_x.dtype, sample_y.dtype)
+print("output:", output.shape, output.dtype)
 
 print("Summary:")
 model.summary()
+
+exit()
 
 print("Compiling...")
 model.compile(
@@ -117,9 +145,11 @@ model.compile(
 
 print("Training...")
 callback_list = [
-  tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs),
-  tf.keras.callbacks.ModelCheckpoint("transformer.h5", save_best_only=True)
+  tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
+  tf.keras.callbacks.ModelCheckpoint("transformer.h5", save_best_only=True, verbose=1)
 ]
+
+print(x_train.dtype, y_train.dtype)
 
 model.fit(
   x_train, y_train,
@@ -128,5 +158,4 @@ model.fit(
   epochs=ARGS.epochs,
   callbacks=callback_list,
 )
-
 

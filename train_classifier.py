@@ -10,6 +10,7 @@ from tensorflow.keras import Model, callbacks, layers
 
 from const import MAX_SENT_LEN
 from load_data import load_preprocessed_sent_data, make_embedding_matrix
+from tf_utils import MyModelCheckpoint
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--batchsize",type=int,default=128)
@@ -23,8 +24,7 @@ parser.add_argument("--earlystopping-epochs",type=int,default=12)
 ARGS = parser.parse_args()
 
 
-dataset, vectorizer = load_preprocessed_sent_data(MAX_SENT_LEN, ARGS.embedding_dim, 
-                                drop_equal=True, target="label")
+dataset, vectorizer = load_preprocessed_sent_data(drop_equal=True, target="label")
 
 embedding_matrix = make_embedding_matrix(ARGS.embedding_dim, vectorizer)
 
@@ -68,10 +68,11 @@ model.summary()
 callback_lst = [
     callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, restore_best_weights=True, verbose=1),
     callbacks.ReduceLROnPlateau(patience=ARGS.reducelr_epochs, factor=ARGS.reducelr_factor, verbose=1),
-    callbacks.ModelCheckpoint("classifier.h5", save_best_only=True)
+    MyModelCheckpoint("classifier.h5", epoch_per_save=5, save_best_only=True, verbose=1)
 ]
 
 x_train, y_train, x_val, y_val, x_test, y_test = dataset
+
 
 model.fit(
     x_train, y_train,
