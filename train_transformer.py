@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from const import MAX_SENT_LEN
 from load_data import load_preprocessed_sent_data
 from transformer import Transformer
+from tf_utils import MyModelCheckpoint
 
 """
 Vaswani et al https://arxiv.org/pdf/1706.03762.pdf
@@ -146,7 +147,7 @@ model.compile(
 print("Training...")
 callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
-  tf.keras.callbacks.ModelCheckpoint("transformer.h5", save_best_only=True, verbose=1)
+  MyModelCheckpoint("transformer.h5", epochs_per_save=1, save_best_only=True, verbose=1)
 ]
 
 print(x_train.dtype, y_train.dtype)

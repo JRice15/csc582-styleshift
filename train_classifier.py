@@ -1,4 +1,5 @@
 import argparse
+from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,7 +14,7 @@ from load_data import load_preprocessed_sent_data, make_embedding_matrix
 from tf_utils import MyModelCheckpoint
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--batchsize",type=int,default=128)
+parser.add_argument("--batchsize",type=int,default=64)
 parser.add_argument("--embedding-dim",type=int,default=50)
 parser.add_argument("--n-hidden-units",type=int,default=128)
 
@@ -23,6 +24,7 @@ parser.add_argument("--reducelr-factor",type=float,default=0.1)
 parser.add_argument("--earlystopping-epochs",type=int,default=12)
 ARGS = parser.parse_args()
 
+pprint(vars(ARGS))
 
 dataset, vectorizer = load_preprocessed_sent_data(drop_equal=True, target="label")
 
