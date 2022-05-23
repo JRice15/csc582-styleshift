@@ -260,6 +260,7 @@ class Transformer(tf.keras.Model):
 
     return padding_mask, look_ahead_mask
 
+  @tf.function
   def train_step(self, data):
     inp, tar = data
     tar_inp = tar[:, :-1]
@@ -275,6 +276,7 @@ class Transformer(tf.keras.Model):
     self.compiled_metrics.update_state(tar_real, predictions)
     return {m.name: m.result() for m in self.metrics}
 
+  @tf.function
   def test_step(self, data):
     # Unpack the data
     inp, tar = data
