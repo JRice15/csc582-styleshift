@@ -200,6 +200,5 @@ model.fit(
   batch_size=ARGS.batchsize,
   epochs=ARGS.epochs,
   callbacks=callback_list,
-  steps_per_epoch=ARGS.steps_per_epoch,
 )
 
