@@ -200,7 +200,7 @@ class Transformer(tf.keras.Model):
       emb_vocab_size, emb_dim = embedding_matrix.shape
       assert emb_vocab_size == vocab_size
       self.embedding_layer = tf.keras.layers.Embedding(vocab_size, emb_dim, 
-                                embeddings_initialize=tf.keras.initializers.Constant(embedding_matrix),
+                                embeddings_initializer=tf.keras.initializers.Constant(embedding_matrix),
                                 trainable=False,
                             )
     else:
