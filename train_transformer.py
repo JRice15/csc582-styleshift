@@ -64,7 +64,7 @@ parser.add_argument("--max-vocab",type=int)
 parser.add_argument("--batchsize",type=int,default=64) 
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=5)
-parser.add_argument("--steps-per-epochs",type=int)
+parser.add_argument("--steps-per-epoch",type=int)
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
