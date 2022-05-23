@@ -65,12 +65,18 @@ parser.add_argument("--batchsize",type=int,default=64)
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=5)
 parser.add_argument("--test",action="store_true",help="just run a small test version")
+
+# misc
+parser.add_argument("--save-path",default="./",help="location to save model under (just a dir)")
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
 for name,value in PRESETS[ARGS.preset].items():
   if getattr(ARGS, name) is None:
     setattr(ARGS, name, value)
+
+if ARGS.save_path[-1] != "/":
+  ARGS.save_path += "/"
 
 pprint(vars(ARGS))
 
@@ -187,7 +193,8 @@ model.compile(
 print("Training...")
 callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
-  MyModelCheckpoint("transformer.tf", epochs_per_save=1, save_best_only=True, verbose=1)
+  MyModelCheckpoint(ARGS.save_path + "transformer.tf", epochs_per_save=1, 
+      save_best_only=True, verbose=1)
 ]
 
 if ARGS.test:
