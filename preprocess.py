@@ -44,10 +44,15 @@ class TextVectorizer:
         vocab_size: total number of index entries (highest index + n special tokens)
     """
 
-    def __init__(self):
+    def __init__(self, max_vocab=None):
+        # take top max_vocab tokens
+        if max_vocab is None:
+            max_vocab = len(VOCAB)
+        vocab = VOCAB[:max_vocab]
+
         n_special = len(SPECIAL_TOKENS)
         # +N because those indexes are is reserved for unknown tokens
-        self.word_to_index = {word: index+n_special for index,word in enumerate(sorted(VOCAB))}
+        self.word_to_index = {word: index+n_special for index,word in enumerate(sorted(vocab))}
         for i,tok in enumerate(SPECIAL_TOKENS):
             assert tok not in self.word_to_index
             assert i not in self.word_to_index.values()
@@ -65,7 +70,7 @@ class TextVectorizer:
         assert len(self.index_to_word) == len(self.word_to_index)
         assert self._vec_f("THIS_TOKEN_DEFINITELY_DOES_NOT_APPEAR") == oov_index
         assert self._vec_f(PADDING_TOKEN) == 0
-        assert self._vec_f("word") > n_special
+        assert self._vec_f("the") > n_special
 
         self._oov_conversions = 0
         self._total_conversions = 0

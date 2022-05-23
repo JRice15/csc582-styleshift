@@ -53,7 +53,8 @@ def make_embedding_matrix(embedding_dim, vectorizer):
 
 
 
-def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_tokens=False):
+def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_tokens=False,
+        max_vocab=None):
     """
     args:
         target: "label" or "simple"
@@ -101,7 +102,7 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
     print("example padded:")
     print(" ", X_normal[8192])
 
-    vectorizer = TextVectorizer()
+    vectorizer = TextVectorizer(max_vocab=max_vocab)
 
     print("example vectorized:")
     print(" ", vectorizer.vectorize([X_normal[8192]]))

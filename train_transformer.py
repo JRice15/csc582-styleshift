@@ -54,7 +54,10 @@ parser.add_argument("--d-ff",type=int,help="hidden units in feedforward nets")
 parser.add_argument("--n-heads",type=int,help="number of attention heads")
 parser.add_argument("--d-key",type=int,help="dimension of key in attention")
 parser.add_argument("--dropout",type=int)
+
+# data params
 parser.add_argument("--use-glove",action="store_true")
+parser.add_argument("--max-vocab",type=int)
 # parser.add_argument("--label-smoothing",type=float,default=0.1,help="e_ls in paper")
 
 # training params
@@ -131,7 +134,8 @@ accuracy_function.__name__ = "my_acc"
 
 ### Dataset
 
-dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, start_end_tokens=True)
+dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
+                          start_end_tokens=True, max_vocab=ARGS.max_vocab)
 x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 if ARGS.use_glove:
