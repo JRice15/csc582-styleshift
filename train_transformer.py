@@ -90,6 +90,12 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     arg2 = step * (self.warmup_steps ** -1.5)
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
+  def get_config(self):
+    return {
+      "d_model": self.d_model,
+      "warmup_steps": self.warmup_steps,
+      **super().get_config(),
+    }
 
 learning_rate = CustomSchedule(ARGS.d_model)
 optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
