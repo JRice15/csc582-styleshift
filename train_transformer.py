@@ -182,7 +182,7 @@ model.compile(
 print("Training...")
 callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
-  MyModelCheckpoint("transformer.h5", epochs_per_save=1, save_best_only=True, verbose=1)
+  MyModelCheckpoint("transformer.tf", epochs_per_save=1, save_best_only=True, verbose=1)
 ]
 
 print(x_train.dtype, y_train.dtype)
