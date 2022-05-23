@@ -61,7 +61,7 @@ def create_padding_mask(seq):
 # be used. Similarly to predict the fourth token, only the first, second and 
 # the third tokens will be used and so on.
 def create_look_ahead_mask(size):
-    n = int(size * (size+1) / 2)
+    n = tf.cast((size * (size+1) / 2), tf.int32)
     mask = tensorflow_probability.math.fill_triangular(tf.ones((n,), dtype=tf.float32), upper=False)
     return mask
 

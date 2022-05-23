@@ -64,7 +64,7 @@ parser.add_argument("--max-vocab",type=int)
 parser.add_argument("--batchsize",type=int,default=64) 
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=5)
-parser.add_argument("--steps-per-epoch",type=int)
+parser.add_argument("--test",action="store_true",help="just run a small test version")
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
@@ -185,7 +185,14 @@ callback_list = [
   MyModelCheckpoint("transformer.tf", epochs_per_save=1, save_best_only=True, verbose=1)
 ]
 
-print(x_train.dtype, y_train.dtype)
+if ARGS.test:
+  size = ARGS.batchsize * 3
+  x_train = x_train[:size]
+  y_train = y_train[:size]
+  x_val = x_val[:size]
+  y_val = y_val[:size]
+  x_test = x_test[:size]
+  y_test = y_test[:size]
 
 model.fit(
   x_train, y_train,
