@@ -12,6 +12,8 @@ from const import MAX_SENT_LEN
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 """
+From https://github.com/tensorflow/text/blob/master/docs/tutorials/transformer.ipynb
+
 My changes:
 * using Keras built-in MultiHeadAttention instead of custom
 * moving train_step inside Transformer to enable .fit() behavior
@@ -273,6 +275,21 @@ class Transformer(tf.keras.Model):
     self.compiled_metrics.update_state(tar_real, predictions)
     return {m.name: m.result() for m in self.metrics}
 
+  def test_step(self, data):
+    # Unpack the data
+    inp, tar = data
+    tar_inp = tar[:, :-1]
+    tar_real = tar[:, 1:]
+
+    # Compute predictions
+    predictions = self([inp, tar_inp], training=False)
+    # Updates the metrics tracking the loss
+    self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
+    # Update the metrics.
+    self.compiled_metrics.update_state(tar_real, predictions)
+    # Return a dict mapping metric names to current value.
+    # Note that it will include the loss (tracked in self.metrics).
+    return {m.name: m.result() for m in self.metrics}
 
 # The target is divided into tar_inp and tar_real. tar_inp is passed as an input 
 # to the decoder. `tar_real` is that same input shifted by 1: At each location in 
