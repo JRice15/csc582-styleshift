@@ -52,7 +52,7 @@ model.summary()
 # print("vocab size:", vocab_size)
 # get data
 dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
-                          start_end_tokens=True, max_vocab=TRAIN_PARAMS.max_vocab)
+                          start_end_tokens=True, max_vocab=TRAIN_PARAMS["max_vocab"])
 x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 # build
