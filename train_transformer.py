@@ -6,6 +6,7 @@ from pprint import pprint
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import backend as K
 import tensorflow_probability
 from sklearn.model_selection import train_test_split
 
@@ -112,7 +113,7 @@ optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
 class MyLRMonitor(tf.keras.callbacks.Callback):
 
   def on_epoch_begin(self, *args, **kwargs):
-    print("  lr:", lr_schedule.most_recent_lr.numpy())
+    print("  lr:", K.eval(lr_schedule.most_recent_lr))
 
 
 ### Loss and metrics
