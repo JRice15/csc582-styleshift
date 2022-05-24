@@ -113,11 +113,16 @@ optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
 class MyLRMonitor(tf.keras.callbacks.Callback):
 
   def on_epoch_begin(self, *args, **kwargs):
-    if lr_schedule.most_recent_lr is None:
-      print("  lr:", None)
-    else:
-      print("  lr:", K.eval(lr_schedule.most_recent_lr))
-
+    lr = lr_schedule.most_recent_lr
+    print("  lr:", lr)
+    try: print(K.eval(lr))
+    except: print("no eval")
+    try: print(lr.numpy())
+    except: print("no numpy")
+    try: print(K.get_value(lr))
+    except: print("no getval")
+    try: print(float(lr))
+    except: print("no float")
 
 ### Loss and metrics
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
