@@ -1,3 +1,5 @@
+import numpy as np
+import tensorflow as tf
 
 
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
