@@ -97,7 +97,8 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     arg1 = tf.math.rsqrt(step)
     arg2 = step * (self.warmup_steps ** -1.5)
     lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
-    self.most_recent_lr = lr
+    print(lr)
+    self.most_recent_lr = lr.numpy()
     return lr
 
   def get_config(self):
@@ -115,14 +116,7 @@ class MyLRMonitor(tf.keras.callbacks.Callback):
   def on_epoch_begin(self, *args, **kwargs):
     lr = lr_schedule.most_recent_lr
     print("  lr:", lr)
-    try: print(K.eval(lr))
-    except: print("no eval")
-    try: print(lr.numpy())
-    except: print("no numpy")
-    try: print(K.get_value(lr))
-    except: print("no getval")
-    try: print(float(lr))
-    except: print("no float")
+
 
 ### Loss and metrics
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
