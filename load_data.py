@@ -54,7 +54,7 @@ def make_embedding_matrix(embedding_dim, vectorizer):
 
 
 def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_tokens=False,
-        max_vocab=None):
+        max_vocab=None, show_example=True):
     """
     args:
         target: "label" or "simple"
@@ -82,8 +82,9 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
     data = data[(data.normal.apply(len) <= MAX_SENT_LEN) & (data.simple.apply(len) <= MAX_SENT_LEN)]
     print("fraction of sentences dropped for length:", (orig_examples - len(data)) / orig_examples)
 
-    print("example tokenized:")
-    print(" ", data.normal.iloc[8192])
+    if show_example:
+        print("example tokenized:")
+        print(" ", data.normal.iloc[8192])
 
     str_dtype = np.dtype("U" + str(MAX_WORD_LEN))
     X_normal = pad_sequences(
@@ -91,21 +92,27 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
                 maxlen=MAX_SENT_LEN,
                 dtype=str_dtype, # max 50 letters in a word 
                 value=PADDING_TOKEN,
+                padding="post",
+                truncating="post",
             )
     X_simple = pad_sequences(
                 data.simple.to_list(),
                 maxlen=MAX_SENT_LEN,
                 dtype=str_dtype,
                 value=PADDING_TOKEN,
+                padding="post",
+                truncating="post",
             )
 
-    print("example padded:")
-    print(" ", X_normal[8192])
+    if show_example:
+        print("example padded:")
+        print(" ", X_normal[8192])
 
     vectorizer = TextVectorizer(max_vocab=max_vocab)
 
-    print("example vectorized:")
-    print(" ", vectorizer.vectorize([X_normal[8192]]))
+    if show_example:
+        print("example vectorized:")
+        print(" ", vectorizer.vectorize([X_normal[8192]]))
 
     # 20% testing, ~10% validation
     train_inds, test_inds = train_test_split(np.arange(len(X_normal)), test_size=0.2, random_state=1)
