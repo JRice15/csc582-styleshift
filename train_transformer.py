@@ -64,7 +64,7 @@ parser.add_argument("--max-vocab",type=int)
 # training params
 parser.add_argument("--batchsize",type=int,default=64) 
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
-parser.add_argument("--earlystopping-epochs",type=int,default=5)
+parser.add_argument("--earlystopping-epochs",type=int,default=2)
 parser.add_argument("--test",action="store_true",help="just run a small test version")
 
 # misc

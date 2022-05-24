@@ -82,6 +82,12 @@ class EncoderLayer(tf.keras.layers.Layer):
 
   def __init__(self, *, d_model, num_heads, d_key, d_ff, rate=0.1, **kwargs):
     super().__init__(**kwargs)
+    self.d_model = d_model
+    self.num_heads = num_heads
+    self.d_key = d_key
+    self.d_ff = d_ff
+    self.rate = rate
+
     self.mha = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_key)
     self.ffn = point_wise_feed_forward_network(d_model, d_ff)
     self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -99,12 +105,27 @@ class EncoderLayer(tf.keras.layers.Layer):
     out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
     return out2
 
+  def get_config(self):
+    return {
+      "d_model": self.d_model,
+      "num_heads": self.num_heads,
+      "d_key": self.d_key,
+      "d_ff": self.d_ff,
+      "rate": self.rate,
+      **super().get_config(),
+    }
 
 ### Decoder layer
 
 class DecoderLayer(tf.keras.layers.Layer):
   def __init__(self, *, d_model, num_heads, d_key, d_ff, rate=0.1, **kwargs):
     super().__init__(**kwargs)
+    self.d_model = d_model
+    self.num_heads = num_heads
+    self.d_key = d_key
+    self.d_ff = d_ff
+    self.rate = rate
+
     self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_key)
     self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_key)
     self.ffn = point_wise_feed_forward_network(d_model, d_ff)
@@ -133,6 +154,15 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     return out3, attn1_weights, attn2_weights
 
+  def get_config(self):
+    return {
+      "d_model": self.d_model,
+      "num_heads": self.num_heads,
+      "d_key": self.d_key,
+      "d_ff": self.d_ff,
+      "rate": self.rate,
+      **super().get_config(),
+    }
 
 ### Encoder
 
@@ -140,8 +170,12 @@ class Encoder(tf.keras.layers.Layer):
 
   def __init__(self, *, num_layers, d_model, d_key, num_heads, d_ff, rate=0.1, **kwargs):
     super().__init__(**kwargs)
-    self.d_model = d_model
     self.num_layers = num_layers
+    self.d_model = d_model
+    self.num_heads = num_heads
+    self.d_key = d_key
+    self.d_ff = d_ff
+    self.rate = rate
 
     self.dropout = tf.keras.layers.Dropout(rate)
     self.enc_layers = [
@@ -156,6 +190,16 @@ class Encoder(tf.keras.layers.Layer):
 
     return x  # (batch_size, input_seq_len, d_model)
 
+  def get_config(self):
+    return {
+      "num_layers": self.num_layers,
+      "d_model": self.d_model,
+      "num_heads": self.num_heads,
+      "d_key": self.d_key,
+      "d_ff": self.d_ff,
+      "rate": self.rate,
+      **super().get_config(),
+    }
 
 ### Decoder
 
@@ -163,8 +207,12 @@ class Decoder(tf.keras.layers.Layer):
 
   def __init__(self, *, num_layers, d_model, d_key, num_heads, d_ff, rate=0.1, **kwargs):
     super().__init__(**kwargs)
-    self.d_model = d_model
     self.num_layers = num_layers
+    self.d_model = d_model
+    self.num_heads = num_heads
+    self.d_key = d_key
+    self.d_ff = d_ff
+    self.rate = rate
 
     self.dropout = tf.keras.layers.Dropout(rate)
     self.dec_layers = [
@@ -184,6 +232,17 @@ class Decoder(tf.keras.layers.Layer):
     # x.shape == (batch_size, target_seq_len, d_model)
     return x, attention_weights
 
+  def get_config(self):
+    return {
+      "num_layers": self.num_layers,
+      "d_model": self.d_model,
+      "num_heads": self.num_heads,
+      "d_key": self.d_key,
+      "d_ff": self.d_ff,
+      "rate": self.rate,
+      **super().get_config(),
+    }
+
 
 ### Create the transformer model
 
@@ -196,8 +255,18 @@ class Transformer(tf.keras.Model):
   def __init__(self, *, num_layers, num_heads, d_model, d_key, d_ff, vocab_size,
                 rate=0.1, embedding_matrix=None, **kwargs):
     super().__init__(**kwargs)
+    self.num_layers = num_layers
     self.d_model = d_model
+    self.num_heads = num_heads
+    self.d_key = d_key
+    self.d_ff = d_ff
+    self.rate = rate
+    self.vocab_size = vocab_size
 
+    # constant pos encoding
+    self.pos_encoding = positional_encoding(MAX_SENT_LEN, d_model)
+
+    # create embedding layer
     if embedding_matrix is not None:
       emb_vocab_size, emb_dim = embedding_matrix.shape
       assert emb_vocab_size == vocab_size
@@ -208,16 +277,13 @@ class Transformer(tf.keras.Model):
     else:
       self.embedding_layer = tf.keras.layers.Embedding(vocab_size, d_model, trainable=True)
 
-    self.pos_encoding = positional_encoding(MAX_SENT_LEN, d_model)
-
+    # other layers
     self.encoder = Encoder(num_layers=num_layers, d_model=d_model,
                            num_heads=num_heads, d_ff=d_ff, d_key=d_key,
                            rate=rate)
-
     self.decoder = Decoder(num_layers=num_layers, d_model=d_model,
                            num_heads=num_heads, d_ff=d_ff, d_key=d_key,
                            rate=rate)
-
     self.final_layer = tf.keras.layers.Dense(vocab_size)
 
   def call(self, inputs, training):
@@ -290,6 +356,21 @@ class Transformer(tf.keras.Model):
     # Return a dict mapping metric names to current value.
     # Note that it will include the loss (tracked in self.metrics).
     return {m.name: m.result() for m in self.metrics}
+
+  def get_config(self):
+    # if loading from config, we don't need to specify the embedding matrix 
+    # initializer, because its weights have been saved already in the model
+    return {
+      "num_layers": self.num_layers,
+      "d_model": self.d_model,
+      "num_heads": self.num_heads,
+      "d_key": self.d_key,
+      "d_ff": self.d_ff,
+      "rate": self.rate,
+      "vocab_size": self.vocab_size,
+      **super().get_config(),
+    }
+
 
 # The target is divided into tar_inp and tar_real. tar_inp is passed as an input 
 # to the decoder. `tar_real` is that same input shifted by 1: At each location in 
