@@ -91,14 +91,11 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     self.d_model = d_model
     self.d_model = tf.cast(self.d_model, tf.float32)
     self.warmup_steps = warmup_steps
-    self.most_recent_lr = None
 
   def __call__(self, step):
     arg1 = tf.math.rsqrt(step)
     arg2 = step * (self.warmup_steps ** -1.5)
     lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
-    print(lr)
-    self.most_recent_lr = lr.numpy()
     return lr
 
   def get_config(self):
@@ -110,12 +107,6 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 lr_schedule = CustomSchedule(ARGS.d_model)
 optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
-
-class MyLRMonitor(tf.keras.callbacks.Callback):
-
-  def on_epoch_begin(self, *args, **kwargs):
-    lr = lr_schedule.most_recent_lr
-    print("  lr:", lr)
 
 
 ### Loss and metrics
@@ -206,7 +197,6 @@ callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
   MyModelCheckpoint(ARGS.save_path + "transformer.tf", epochs_per_save=1, 
       save_best_only=True, verbose=1),
-  MyLRMonitor(),
 ]
 
 if ARGS.test:
