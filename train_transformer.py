@@ -67,7 +67,7 @@ parser.add_argument("--earlystopping-epochs",type=int,default=5)
 parser.add_argument("--test",action="store_true",help="just run a small test version")
 
 # misc
-parser.add_argument("--save-path",default="./",help="location to save model under (just a dir)")
+parser.add_argument("--save-path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
@@ -112,7 +112,7 @@ optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
 class MyLRMonitor(tf.keras.callbacks.Callback):
 
   def on_epoch_begin(self, *args, **kwargs):
-    print("  lr:", lr_schedule.most_recent_lr)
+    print("  lr:", lr_schedule.most_recent_lr.numpy())
 
 
 ### Loss and metrics
