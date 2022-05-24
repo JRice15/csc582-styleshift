@@ -76,8 +76,7 @@ for name,value in PRESETS[ARGS.preset].items():
   if getattr(ARGS, name) is None:
     setattr(ARGS, name, value)
 
-if ARGS.save_path[-1] != "/":
-  ARGS.save_path += "/"
+assert ARGS.save_path.endswith(".tf")
 
 pprint(vars(ARGS))
 
@@ -200,7 +199,7 @@ callback_list = [
 ]
 
 if ARGS.test:
-  size = ARGS.batchsize * 3
+  size = ARGS.batchsize * 20
   x_train = x_train[:size]
   y_train = y_train[:size]
   x_val = x_val[:size]
