@@ -59,26 +59,6 @@ x_train, y_train, x_val, y_val, x_test, y_test = dataset
 result, attn = model([x_train[:ARGS.batchsize], y_train[:ARGS.batchsize, :-1]])
 
 
-# monkey patch test step back onto the model bc it got lost somehow
-def monkeypatched_test_step(*args, **kwargs):
-    return transformer.Transformer.test_step(model, *args, **kwargs)
-model.test_step = monkeypatched_test_step
-
-print("Evaluate val data...")
-pprint(model.evaluate(
-    x_val, y_val, 
-    batch_size=ARGS.batchsize,
-    return_dict=True
-))
-
-print("Evaluate test data...")
-pprint(model.evaluate(
-    x_test, y_test, 
-    batch_size=ARGS.batchsize,
-    return_dict=True
-))
-
-
 # @tf.function
 def predict_sentence(transformer, sentence):
     encoder_input = sentence[tf.newaxis]        
@@ -125,11 +105,33 @@ def predict_sentence(transformer, sentence):
 
 print("Predictions:")
 for i in range(5):
-    pred, attn_w = predict_sentence(model, x_test[0])
+    inpt, target = x_test[i], y_test[i]
+    pred, attn_w = predict_sentence(model, inpt)
 
-    inpt = vectorizer.unvectorize(x_test[0])
-    target = vectorizer.unvectorize(y_test[0])
-    print("input:", " ".join(inpt).strip())
-    print("targ: ", " ".join(target).strip())
-    print("pred: ", " ".join(pred).strip())
+    inpt = vectorizer.unvectorize(inpt)
+    target = vectorizer.unvectorize(target)
+    print("input: ", " ".join(inpt).strip())
+    print("  targ:", " ".join(target).strip())
+    print("  pred:", " ".join(pred).strip())
 
+
+
+
+# monkey patch test step back onto the model bc it got lost somehow
+def monkeypatched_test_step(*args, **kwargs):
+    return transformer.Transformer.test_step(model, *args, **kwargs)
+model.test_step = monkeypatched_test_step
+
+print("Evaluate val data...")
+pprint(model.evaluate(
+    x_val, y_val, 
+    batch_size=ARGS.batchsize,
+    return_dict=True
+))
+
+print("Evaluate test data...")
+pprint(model.evaluate(
+    x_test, y_test, 
+    batch_size=ARGS.batchsize,
+    return_dict=True
+))
