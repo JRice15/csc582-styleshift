@@ -2,6 +2,7 @@ import logging
 import time
 import argparse
 from pprint import pprint
+import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,6 +25,7 @@ PRESETS = {
     "n_heads": 4,
     "d_key": 64,
     "dropout": 0.1,
+    "max_vocab": 100_000,
   },
   "small": {
     "n_layers": 1,
@@ -32,6 +34,7 @@ PRESETS = {
     "n_heads": 2,
     "d_key": 32,
     "dropout": 0.1,
+    "max_vocab": 10_000,
   },
   # Baseline in Vaswani et al https://arxiv.org/pdf/1706.03762.pdf
   "orig": {
@@ -69,7 +72,7 @@ parser.add_argument("--earlystopping-epochs",type=int,default=2)
 parser.add_argument("--test",action="store_true",help="just run a small test version")
 
 # misc
-parser.add_argument("--save-path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
+parser.add_argument("--path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
@@ -77,9 +80,14 @@ for name,value in PRESETS[ARGS.preset].items():
   if getattr(ARGS, name) is None:
     setattr(ARGS, name, value)
 
-assert ARGS.save_path.endswith(".tf")
+assert ARGS.path.endswith(".tf")
 
 pprint(vars(ARGS))
+
+# save params to json
+params_path = ARGS.path[:-3] + "_params.json"
+with open(params_path, "w") as f:
+  json.dump(dict(vars(ARGS)), f, indent=2)
 
 ### Dataset
 
@@ -136,7 +144,7 @@ model.compile(
 print("Training...")
 callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
-  MyModelCheckpoint(ARGS.save_path, epochs_per_save=1, 
+  MyModelCheckpoint(ARGS.path, epochs_per_save=1, 
       save_best_only=True, verbose=1),
 ]
 

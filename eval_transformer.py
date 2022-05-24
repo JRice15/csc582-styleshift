@@ -20,7 +20,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--path",required=True,help="path to model to load (must end with '.tf')")
 parser.add_argument("--batchsize",default=64,help="batchsize during eval")
 ARGS = parser.parse_args()
+
+assert ARGS.path.endswith(".tf")
+
 pprint(vars(ARGS))
+
+# load params from json
+params_path = ARGS.path[:-3] + "_params.json"
+with open(params_path, "r") as f:
+  TRAIN_PARAMS = json.load(f)
 
 
 custom_objs = {
@@ -39,11 +47,11 @@ model = tf.keras.models.load_model(ARGS.path, custom_objects=custom_objs)
 model.summary()
 
 # hacky way to compute vocab size of model
-vocab_size = model.final_layer.units - len(SPECIAL_TOKENS)
-print("vocab size:", vocab_size)
+# vocab_size = model.final_layer.units - len(SPECIAL_TOKENS)
+# print("vocab size:", vocab_size)
 # get data
 dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
-                          start_end_tokens=True, max_vocab=vocab_size)
+                          start_end_tokens=True, max_vocab=TRAIN_PARAMS.max_vocab)
 x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 # build
@@ -56,12 +64,11 @@ def monkeypatched_test_step(*args, **kwargs):
     return transformer.Transformer.test_step(model, *args, **kwargs)
 model.test_step = monkeypatched_test_step
 
-
-# pprint(model.evaluate(
-#     x_val, y_val, 
-#     batch_size=ARGS.batchsize,
-#     return_dict=True
-# ))
+pprint(model.evaluate(
+    x_test, y_test, 
+    batch_size=ARGS.batchsize,
+    return_dict=True
+))
 
 
 # @tf.function
@@ -108,12 +115,13 @@ def predict_sentence(transformer, sentence):
     return text, attention_weights
 
 
+print("Predictions:")
+for i in range(5):
+    pred, attn_w = predict_sentence(model, x_test[0])
 
-pred, attn_w = predict_sentence(model, x_test[0])
-
-inpt = vectorizer.unvectorize(x_test[0])
-target = vectorizer.unvectorize(y_test[0])
-print("input:", " ".join(inpt).strip())
-print("targ: ", " ".join(target).strip())
-print("pred: ", " ".join(pred).strip())
+    inpt = vectorizer.unvectorize(x_test[0])
+    target = vectorizer.unvectorize(y_test[0])
+    print("input:", " ".join(inpt).strip())
+    print("targ: ", " ".join(target).strip())
+    print("pred: ", " ".join(pred).strip())
 
