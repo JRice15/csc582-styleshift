@@ -10,7 +10,7 @@ from tensorflow.keras import backend as K
 import tensorflow_probability
 from sklearn.model_selection import train_test_split
 
-from const import MAX_SENT_LEN
+from const import MAX_SENT_LEN, START_TOKEN, END_TOKEN, PADDING_TOKEN, SPECIAL_TOKENS
 from load_data import load_preprocessed_sent_data
 import transformer
 from transformer_utils import CustomSchedule, loss_function, accuracy_metric
@@ -36,3 +36,63 @@ custom_objs = {
 model = tf.keras.models.load_model(ARGS.path, custom_objects=custom_objs)
 
 model.summary()
+
+# hacky way to compute vocab size of model
+vocab_size = model.final_layer.units - len(SPECIAL_TOKENS)
+print("vocab size:", vocab_size)
+# get data
+dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
+                          start_end_tokens=True, max_vocab=vocab_size)
+x_train, y_train, x_val, y_val, x_test, y_test = dataset
+
+
+print("Eval on test data...")
+model.evaluate(x_test, y_test)
+
+@tf.function
+def predict_sentence(transformer, sentence):
+    encoder_input = sentence
+
+    # initialize the output with the start token.
+    start = vectorizer.vectorize([START_TOKEN])
+    end = vectorizer.vectorize([END_TOKEN])
+
+    # `tf.TensorArray` is required here (instead of a python list) so that the
+    # dynamic-loop can be traced by `tf.function`.
+    output_array = tf.TensorArray(dtype=tf.int64, size=0, dynamic_size=True)
+    output_array = output_array.write(0, start)
+
+    for i in tf.range(MAX_SENT_LEN):
+      output = tf.transpose(output_array.stack())
+      predictions, _ = transformer([encoder_input, output], training=False)
+
+      # select the last token from the seq_len dimension
+      predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)
+
+      predicted_id = tf.argmax(predictions, axis=-1)
+
+      # concatentate the predicted_id to the output which is given to the decoder
+      # as its input.
+      output_array = output_array.write(i+1, predicted_id[0])
+
+      if predicted_id == end:
+        break
+
+    output = tf.transpose(output_array.stack())
+    # output.shape (1, tokens)
+    text = vectorizer.unvectorize(output)
+
+    # `tf.function` prevents us from using the attention_weights that were
+    # calculated on the last iteration of the loop. So recalculate them outside
+    # the loop.
+    _, attention_weights = transformer([encoder_input, output[:,:-1]], training=False)
+
+    return text, attention_weights
+
+
+
+pred, attn_w = predict_sentence(model, x_test[0])
+
+print(x_test[0])
+print(pred)
+print(y_test[0])
