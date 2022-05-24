@@ -129,7 +129,7 @@ def loss_function(real, pred):
   return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
 
 @tf.function
-def accuracy_function(real, pred):
+def accuracy_metric(real, pred):
   real = tf.cast(real, tf.int32)
   accuracies = tf.equal(real, tf.argmax(pred, axis=2, output_type=tf.int32))
 
@@ -140,8 +140,12 @@ def accuracy_function(real, pred):
   mask = tf.cast(mask, dtype=tf.float32)
   return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
 
-accuracy_function.__name__ = "my_acc"
+accuracy_metric.__name__ = "my_acc"
 
+@tf.function
+def lr_metric(real, pred):
+  return optimizer.lr
+lr_metric.__name__ = "lr"
 
 
 ### Dataset
@@ -187,7 +191,7 @@ print("Compiling...")
 model.compile(
   optimizer=optimizer,
   loss=loss_function,
-  metrics=[accuracy_function],
+  metrics=[accuracy_metric, lr_metric],
 )
 
 print("Training...")
