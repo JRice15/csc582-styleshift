@@ -14,6 +14,7 @@ from const import MAX_SENT_LEN
 from load_data import load_preprocessed_sent_data, make_embedding_matrix
 from transformer import Transformer
 from tf_utils import MyModelCheckpoint
+from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 
 PRESETS = {
   "default": {
@@ -80,71 +81,6 @@ assert ARGS.save_path.endswith(".tf")
 
 pprint(vars(ARGS))
 
-
-# Use the Adam optimizer with a custom learning rate scheduler according to the 
-# formula in the [paper](https://arxiv.org/abs/1706.03762).
-class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-
-  def __init__(self, d_model, warmup_steps=4000):
-    super().__init__()
-    self.d_model = d_model
-    self.d_model = tf.cast(self.d_model, tf.float32)
-    self.warmup_steps = warmup_steps
-
-  def __call__(self, step):
-    arg1 = tf.math.rsqrt(step)
-    arg2 = step * (self.warmup_steps ** -1.5)
-    lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
-    return lr
-
-  def get_config(self):
-    return {
-      "d_model": int(self.d_model.numpy()),
-      "warmup_steps": int(self.warmup_steps),
-    }
-
-lr_schedule = CustomSchedule(ARGS.d_model)
-optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
-                                     epsilon=1e-9)
-
-
-### Loss and metrics
-loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-    from_logits=True, reduction='none')
-
-# loss_spec = [
-#     tf.TensorSpec(shape=(None,MAX_SENT_LEN-1), dtype=tf.int32),
-#     tf.TensorSpec(shape=(None,MAX_SENT_LEN-1,vectorizer.vocab_size), dtype=tf.float32),    
-# ]
-
-# Since the target sequences are padded, it is important to apply a padding mask 
-# when calculating the loss.
-
-@tf.function
-def loss_function(real, pred):
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
-  loss_ = loss_object(real, pred)
-
-  mask = tf.cast(mask, dtype=loss_.dtype)
-  loss_ *= mask
-  return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
-
-@tf.function
-def accuracy_metric(real, pred):
-  real = tf.cast(real, tf.int32)
-  accuracies = tf.equal(real, tf.argmax(pred, axis=2, output_type=tf.int32))
-
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
-  accuracies = tf.math.logical_and(mask, accuracies)
-
-  accuracies = tf.cast(accuracies, dtype=tf.float32)
-  mask = tf.cast(mask, dtype=tf.float32)
-  return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
-
-accuracy_metric.__name__ = "my_acc"
-
-
-
 ### Dataset
 
 dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
@@ -185,6 +121,12 @@ model.summary()
 
 
 print("Compiling...")
+# Use the Adam optimizer with a custom learning rate scheduler according to the 
+# formula in the [paper](https://arxiv.org/abs/1706.03762).
+lr_schedule = CustomSchedule(ARGS.d_model)
+optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
+                                     epsilon=1e-9)
+
 model.compile(
   optimizer=optimizer,
   loss=loss_function,
