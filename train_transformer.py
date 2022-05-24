@@ -90,11 +90,14 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     self.d_model = d_model
     self.d_model = tf.cast(self.d_model, tf.float32)
     self.warmup_steps = warmup_steps
+    self.most_recent_lr = None
 
   def __call__(self, step):
     arg1 = tf.math.rsqrt(step)
     arg2 = step * (self.warmup_steps ** -1.5)
-    return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+    lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+    self.most_recent_lr = lr
+    return lr
 
   def get_config(self):
     return {
@@ -102,8 +105,8 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
       "warmup_steps": int(self.warmup_steps),
     }
 
-learning_rate = CustomSchedule(ARGS.d_model)
-optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
+lr_schedule = CustomSchedule(ARGS.d_model)
+optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
 
@@ -142,9 +145,9 @@ def accuracy_metric(real, pred):
 
 accuracy_metric.__name__ = "my_acc"
 
-@tf.function
+# @tf.function
 def lr_metric(real, pred):
-  return optimizer.lr
+  return lr_schedule.most_recent_lr
 lr_metric.__name__ = "lr"
 
 
