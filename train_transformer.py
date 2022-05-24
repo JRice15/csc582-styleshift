@@ -90,7 +90,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     self.d_model = d_model
     self.d_model = tf.cast(self.d_model, tf.float32)
     self.warmup_steps = warmup_steps
-    self.most_recent_lr = None
+    self.most_recent_lr = self(1)
 
   def __call__(self, step):
     arg1 = tf.math.rsqrt(step)
@@ -108,6 +108,11 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 lr_schedule = CustomSchedule(ARGS.d_model)
 optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
+
+class MyLRMonitor(tf.keras.callback.Callback):
+
+  def on_epoch_begin(self, *args, **kwargs):
+    print("  lr:", lr_schedule.most_recent_lr)
 
 
 ### Loss and metrics
@@ -145,10 +150,6 @@ def accuracy_metric(real, pred):
 
 accuracy_metric.__name__ = "my_acc"
 
-# @tf.function
-def lr_metric(real, pred):
-  return lr_schedule.most_recent_lr
-lr_metric.__name__ = "lr"
 
 
 ### Dataset
@@ -194,14 +195,15 @@ print("Compiling...")
 model.compile(
   optimizer=optimizer,
   loss=loss_function,
-  metrics=[accuracy_metric, lr_metric],
+  metrics=[accuracy_metric],
 )
 
 print("Training...")
 callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
   MyModelCheckpoint(ARGS.save_path + "transformer.tf", epochs_per_save=1, 
-      save_best_only=True, verbose=1)
+      save_best_only=True, verbose=1),
+  MyLRMonitor(),
 ]
 
 if ARGS.test:
