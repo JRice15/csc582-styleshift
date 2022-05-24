@@ -91,7 +91,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     self.d_model = d_model
     self.d_model = tf.cast(self.d_model, tf.float32)
     self.warmup_steps = warmup_steps
-    self.most_recent_lr = self(1.0)
+    self.most_recent_lr = self(None)
 
   def __call__(self, step):
     arg1 = tf.math.rsqrt(step)
@@ -113,7 +113,10 @@ optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
 class MyLRMonitor(tf.keras.callbacks.Callback):
 
   def on_epoch_begin(self, *args, **kwargs):
-    print("  lr:", K.eval(lr_schedule.most_recent_lr))
+    if lr_schedule.most_recent_lr is None:
+      print("  lr:", None)
+    else:
+      print("  lr:", K.eval(lr_schedule.most_recent_lr))
 
 
 ### Loss and metrics
