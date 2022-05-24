@@ -157,7 +157,7 @@ callback_list = [
 
 if ARGS.lr_mode == "reduce":
   callback_list.append(
-    tf.keras.callbacks.ReduceLROnPlateau(patience=1, factor=0.2, min_delta=0.01)
+    tf.keras.callbacks.ReduceLROnPlateau(patience=1, factor=0.2, min_delta=0.01, verbose=1)
   )
 
 if ARGS.test:
