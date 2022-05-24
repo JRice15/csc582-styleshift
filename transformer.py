@@ -348,7 +348,7 @@ class Transformer(tf.keras.Model):
     tar_real = tar[:, 1:]
 
     # Compute predictions
-    predictions = self([inp, tar_inp], training=False)
+    predictions, _ = self([inp, tar_inp], training=False)
     # Updates the metrics tracking the loss
     self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
     # Update the metrics.
