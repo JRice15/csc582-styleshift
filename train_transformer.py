@@ -70,6 +70,7 @@ parser.add_argument("--batchsize",type=int,default=64)
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=2)
 parser.add_argument("--test",action="store_true",help="just run a small test version")
+parser.add_argument("--lr-mode",choices=["sched","reduce"])
 
 # misc
 parser.add_argument("--path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
@@ -131,8 +132,14 @@ model.summary()
 print("Compiling...")
 # Use the Adam optimizer with a custom learning rate scheduler according to the 
 # formula in the [paper](https://arxiv.org/abs/1706.03762).
-lr_schedule = CustomSchedule(ARGS.d_model)
-optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
+if ARGS.lr_mode == "sched":
+  lr = CustomSchedule(ARGS.d_model)
+elif ARGS.lr_mode == "reduce":
+  lr = 1e-3
+else:
+  raise ValueError("Unknown lr mode")
+
+optimizer = tf.keras.optimizers.Adam(lr, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
 model.compile(
@@ -143,10 +150,15 @@ model.compile(
 
 print("Training...")
 callback_list = [
-  tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1),
+  tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1, min_delta=1e-4),
   MyModelCheckpoint(ARGS.path, epochs_per_save=1, 
       save_best_only=True, verbose=1),
 ]
+
+if ARGS.lr_mode == "reduce":
+  callback_list.append(
+    tf.keras.callbacks.ReduceLROnPlateau(patience=1, factor=0.2, min_delta=0.01)
+  )
 
 if ARGS.test:
   size = ARGS.batchsize * 20

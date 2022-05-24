@@ -58,12 +58,19 @@ x_train, y_train, x_val, y_val, x_test, y_test = dataset
 result, attn = model([x_train[:ARGS.batchsize], y_train[:ARGS.batchsize, :-1]])
 
 
-print("Eval on test data...")
 # monkey patch test step back onto the model bc it got lost somehow
 def monkeypatched_test_step(*args, **kwargs):
     return transformer.Transformer.test_step(model, *args, **kwargs)
 model.test_step = monkeypatched_test_step
 
+print("Evaluate val data...")
+pprint(model.evaluate(
+    x_test, y_test, 
+    batch_size=ARGS.batchsize,
+    return_dict=True
+))
+
+print("Evaluate test data...")
 pprint(model.evaluate(
     x_test, y_test, 
     batch_size=ARGS.batchsize,
