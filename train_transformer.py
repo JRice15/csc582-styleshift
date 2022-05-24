@@ -109,7 +109,7 @@ lr_schedule = CustomSchedule(ARGS.d_model)
 optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
-class MyLRMonitor(tf.keras.callback.Callback):
+class MyLRMonitor(tf.keras.callbacks.Callback):
 
   def on_epoch_begin(self, *args, **kwargs):
     print("  lr:", lr_schedule.most_recent_lr)
