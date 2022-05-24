@@ -66,7 +66,7 @@ model.test_step = monkeypatched_test_step
 
 print("Evaluate val data...")
 pprint(model.evaluate(
-    x_test, y_test, 
+    x_val, y_val, 
     batch_size=ARGS.batchsize,
     return_dict=True
 ))
