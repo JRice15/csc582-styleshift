@@ -70,7 +70,7 @@ parser.add_argument("--batchsize",type=int,default=64)
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=2)
 parser.add_argument("--test",action="store_true",help="just run a small test version")
-parser.add_argument("--lr-mode",choices=["sched","reduce"])
+parser.add_argument("--lr-mode",choices=["sched","reduce"],default="sched")
 
 # misc
 parser.add_argument("--path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
