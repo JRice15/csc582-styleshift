@@ -27,6 +27,15 @@ PRESETS = {
     "dropout": 0.1,
     "max_vocab": 100_000,
   },
+  "medium": {
+    "n_layers": 2,
+    "d_model": 128,
+    "d_ff": 512,
+    "n_heads": 4,
+    "d_key": 64,
+    "dropout": 0.1,
+    "max_vocab": 100_000,
+  },
   "small": {
     "n_layers": 1,
     "d_model": 50,
