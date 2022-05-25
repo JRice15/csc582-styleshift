@@ -45,14 +45,15 @@ def positional_encoding(position, d_model):
 ### Masking
 
 # Mask all the pad tokens in the batch of sequence. It ensures that the model does 
-# not treat padding as the input. The mask indicates where pad value `0` is present: 
-# it outputs a `1` at those locations, and a `0` otherwise.
+# not treat padding as the input. The mask indicates where pad value `0` is present
+
+# JR CHANGE: 1 is for not padded, 0 is for padded
 def create_padding_mask(seq):
-  seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
+  seq = tf.cast(tf.math.not_equal(seq, 0), tf.float32)
 
   # add extra dimensions to add the padding
   # to the attention logits.
-  return seq[:, tf.newaxis, tf.newaxis, :]  # (batch_size, 1, 1, seq_len)
+  return seq[:, tf.newaxis, :]  # (batch_size, 1, 1, seq_len)
 
 
 # The look-ahead mask is used to mask the future tokens in a sequence. In other 
@@ -64,6 +65,12 @@ def create_look_ahead_mask(size):
     n = tf.cast((size * (size+1) / 2), tf.int32)
     mask = tensorflow_probability.math.fill_triangular(tf.ones((n,), dtype=tf.float32), upper=False)
     return mask
+
+# output looks something like:
+# [1 0 0]
+# [1 1 0]
+# [1 1 1]
+
 
 ### Point wise feed forward network
 
@@ -186,7 +193,7 @@ class Encoder(tf.keras.layers.Layer):
     x = self.dropout(x, training=training)
 
     for i in range(self.num_layers):
-      x = self.enc_layers[i](x, training, mask)
+      x = self.enc_layers[i](x, training=training, mask=mask)
 
     return x  # (batch_size, input_seq_len, d_model)
 
@@ -224,7 +231,8 @@ class Decoder(tf.keras.layers.Layer):
 
     attention_weights = {}
     for i in range(self.num_layers):
-      x, attn1_weights, attn2_weights = self.dec_layers[i](x, enc_output, training, look_ahead_mask, padding_mask)
+      x, attn1_weights, attn2_weights = self.dec_layers[i](x, enc_output, training=training, 
+            look_ahead_mask=look_ahead_mask, padding_mask=padding_mask)
 
       attention_weights[f"decoder_layer{i}_attn1_weights"] = attn1_weights
       attention_weights[f"decoder_layer{i}_attn2_weights"] = attn2_weights
@@ -298,7 +306,7 @@ class Transformer(tf.keras.Model):
     inp *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
     inp += self.pos_encoding[:, :seq_len, :]
 
-    enc_output = self.encoder(inp, training, padding_mask)  
+    enc_output = self.encoder(inp, training=training, mask=padding_mask)
     # (batch_size, inp_seq_len, d_model)
 
     ### Decoder
@@ -307,7 +315,8 @@ class Transformer(tf.keras.Model):
     tar *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
     tar += self.pos_encoding[:, :seq_len, :]
 
-    dec_output, attn_weights = self.decoder(tar, enc_output, training, look_ahead_mask, padding_mask)
+    dec_output, attn_weights = self.decoder(tar, enc_output, training=training, 
+            look_ahead_mask=look_ahead_mask, padding_mask=padding_mask)
     # dec_output.shape == (batch_size, tar_seq_len, d_model)
 
     final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
@@ -322,7 +331,9 @@ class Transformer(tf.keras.Model):
     # the decoder.
     look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
     dec_target_padding_mask = create_padding_mask(tar)
-    look_ahead_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+
+    # JR CHANGE: since masks are inverted, a zero (ignore that location) in either mask should result in a zero in the output
+    look_ahead_mask = tf.minimum(dec_target_padding_mask, look_ahead_mask)
 
     return padding_mask, look_ahead_mask
 

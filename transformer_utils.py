@@ -34,9 +34,9 @@ loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
 def loss_function(real, pred):
   # Since the target sequences are padded, it is important to apply a padding mask 
   # when calculating the loss.
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
   loss_ = loss_object(real, pred)
 
+  mask = tf.math.not_equal(real, 0)
   mask = tf.cast(mask, dtype=loss_.dtype)
   loss_ *= mask
   return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
@@ -46,7 +46,7 @@ def accuracy_metric(real, pred):
   real = tf.cast(real, tf.int32)
   accuracies = tf.equal(real, tf.argmax(pred, axis=2, output_type=tf.int32))
 
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
+  mask = tf.math.not_equal(real, 0)
   accuracies = tf.math.logical_and(mask, accuracies)
 
   accuracies = tf.cast(accuracies, dtype=tf.float32)

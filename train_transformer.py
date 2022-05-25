@@ -34,7 +34,7 @@ PRESETS = {
     "n_heads": 2,
     "d_key": 32,
     "dropout": 0.1,
-    "max_vocab": 10_000,
+    "max_vocab": 1_000,
   },
   # Baseline in Vaswani et al https://arxiv.org/pdf/1706.03762.pdf
   "orig": {
