@@ -19,10 +19,10 @@ from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 
 PRESETS = {
   "default": {
-    "n_layers": 2,
+    "n_layers": 4,
     "d_model": 128,
     "d_ff": 512,
-    "n_heads": 4,
+    "n_heads": 8,
     "d_key": 64,
     "dropout": 0.1,
     "max_vocab": 100_000,
