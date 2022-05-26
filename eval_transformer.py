@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--path",required=True,help="path to model to load (must end with '.tf')")
 parser.add_argument("--batchsize",default=64,type=int,help="batchsize during eval")
 parser.add_argument("--nsamples",default=5,type=int,help="number of sample predictions to show")
+parser.add_argument("--samples-only",action="store_true",help="whether to only show samples, not eval on val/test data")
 ARGS = parser.parse_args()
 
 assert ARGS.path.endswith(".tf")
@@ -59,6 +60,7 @@ x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 # build
 result, attn = model([x_train[:ARGS.batchsize], y_train[:ARGS.batchsize, :-1]])
+
 
 def predict_sentence(transformer, sentence):
   encoder_input = sentence[tf.newaxis]
@@ -106,21 +108,77 @@ def predict_sentence(transformer, sentence):
   return text, attention_weights
 
 
+def plot_attention_head(in_tokens, translated_tokens, attention):
+  # The plot is of the attention when a token was generated.
+  # The model didn't generate `<START>` in the output. Skip it.
+  translated_tokens = translated_tokens[1:]
+
+  ax = plt.gca()
+  ax.matshow(attention.T)
+  ax.set_xticks(range(len(translated_tokens)))
+  ax.set_yticks(range(len(in_tokens)))
+
+  ax.set_xticklabels([label for label in translated_tokens], rotation=90)
+  ax.set_yticklabels([label for label in in_tokens])
+
+  # plt.xlabel("Prediction")
+  # plt.ylabel("Input")
+
+
+def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_num):
+  fig = plt.figure(figsize=(16, 8))
+
+  for h, head in enumerate(attention_heads):
+    ax = fig.add_subplot(2, 4, h+1)
+
+    plot_attention_head(in_tokens, translated_tokens, head)
+
+    ax.set_xlabel(f'Head {h+1}')
+
+  plt.suptitle(f"Attention weights for each head (layer {layer_num})")
+  plt.tight_layout()
+  plt.show()
+
+  sum_head = attention_heads.sum(axis=0)
+  plot_attention_head(in_tokens, translated_tokens, head)
+
+  plt.suptitle(f"Sum of attention heads (layer {layer_num})")
+  plt.tight_layout()
+  plt.show()
+
+
 
 print("Predictions on test set:")
-for i in range(ARGS.nsamples):
-    inpt, target = x_test[i], y_test[i]
-    pred, attn_w = predict_sentence(model, inpt)
+for i in np.random.choice(len(x_test), size=ARGS.nsamples):
+  inpt, target = x_test[i], y_test[i]
+  pred, attn_weights = predict_sentence(model, inpt)
 
-    inpt = vectorizer.unvectorize(inpt)
-    target = vectorizer.unvectorize(target)
-    results = {
-      "inpt": " ".join(inpt).strip(),
-      "targ": " ".join(target).strip(),
-      "pred": " ".join(pred).strip(), 
-    }
-    print(i)
-    pprint(results)
+  inpt = vectorizer.unvectorize(inpt)
+  target = vectorizer.unvectorize(target)
+  results = {
+    "inpt": " ".join(inpt).strip(),
+    "targ": " ".join(target).strip(),
+    "pred": " ".join(pred).strip(), 
+  }
+  print("Example", i)
+  pprint(results)
+
+
+  inpt_len = (inpt != PADDING_TOKEN).sum()
+  pred_len = (pred != PADDING_TOKEN).sum()
+
+  these_weights = tf.squeeze(attn_weights['decoder_layer2_attn2_weights'], axis=0)
+
+  plot_attention_weights(
+    inpt[:inpt_len],
+    pred[:pred_len],
+    these_weights[:, :pred_len-1, :inpt_len].numpy(),
+    layer_num="decoder_layer2_attn2",
+  )
+
+
+if ARGS.samples_only:
+  exit()
 
 
 # monkey patch test step back onto the model bc it got lost somehow

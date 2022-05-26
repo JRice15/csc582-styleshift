@@ -212,7 +212,8 @@ class Encoder(tf.keras.layers.Layer):
 
 class Decoder(tf.keras.layers.Layer):
 
-  def __init__(self, *, num_layers, d_model, d_key, num_heads, d_ff, rate=0.1, **kwargs):
+  def __init__(self, *, num_layers, d_model, d_key, num_heads, d_ff, rate=0.1, 
+        **kwargs):
     super().__init__(**kwargs)
     self.num_layers = num_layers
     self.d_model = d_model
