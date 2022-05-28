@@ -106,8 +106,7 @@ if os.path.exists(ARGS.dir):
   print(" ", ARGS.dir)
   time.sleep(5)
   shutil.rmtree(ARGS.dir)
-else:
-  os.makedirs(ARGS.dir, exist_ok=True)
+os.makedirs(ARGS.dir, exist_ok=True)
 
 # save params to json
 with open(ARGS.dir + "params.json", "w") as f:
