@@ -1,21 +1,23 @@
-import logging
-import time
 import argparse
-from pprint import pprint
 import json
+import logging
+import os
+import sys
+import time
+from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import backend as K
 import tensorflow_probability
 from sklearn.model_selection import train_test_split
+from tensorflow.keras import backend as K
 
 from const import MAX_SENT_LEN
 from load_data import load_preprocessed_sent_data, make_embedding_matrix
-from transformer import Transformer
 from tf_utils import MyModelCheckpoint
-from transformer_utils import CustomSchedule, loss_function, accuracy_metric
+from transformer import Transformer
+from transformer_utils import CustomSchedule, accuracy_metric, loss_function
 
 PRESETS = {
   "default": {
@@ -85,7 +87,7 @@ parser.add_argument("--lr-mode",choices=["sched","reduce"],default="sched")
 
 # misc
 parser.add_argument("--test",action="store_true",help="just run a small test version on a few batches of data")
-parser.add_argument("--path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
+parser.add_argument("--path",default="models/transformer.tf",help="path tp save model to (must end with '.tf')")
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
@@ -97,6 +99,7 @@ assert ARGS.path.endswith(".tf")
 
 pprint(vars(ARGS))
 
+os.makedirs("models", exist_ok=True)
 # save params to json
 params_path = ARGS.path[:-3] + "_params.json"
 with open(params_path, "w") as f:
