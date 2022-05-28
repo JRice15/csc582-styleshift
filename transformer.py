@@ -329,7 +329,7 @@ class Transformer(tf.keras.Model):
     tar_emb *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
     tar_emb += self.pos_encoding[:, :seq_len, :]
 
-    dec_output, dec_state, attn_weights = self.decoder(tar_emb, enc_output, 
+    dec_output, dec_state, auxiliary_outputs = self.decoder(tar_emb, enc_output, 
             training=training, look_ahead_mask=look_ahead_mask, padding_mask=padding_mask)
     # dec_output.shape: (batch_size, tar_seq_len, d_model)
 
@@ -338,15 +338,14 @@ class Transformer(tf.keras.Model):
     ### Pointer-Generator mechanism
     if self.use_pointer_net:
       last_layer = self.num_layers - 1
-      last_attn = attn_weights[f"decoder_layer{last_layer}_attn2_weights"]
+      last_attn = auxiliary_outputs[f"decoder_layer{last_layer}_attn2_weights"]
 
       final_output, pointer_data = self.pointer_net(inp_tokens=inp_tokens, tar_embedded=tar_emb,
             generator_output=final_output, enc_output=enc_output, dec_state=dec_state, 
             attn_heads=last_attn)
-    else:
-      pointer_data = {}
+      auxiliary_outputs.update(pointer_data)
 
-    return final_output, attn_weights, pointer_data
+    return final_output, auxiliary_outputs
 
   def create_masks(self, inp, tar):
     # Encoder padding mask (Used in the 2nd attention block in the decoder too.)
@@ -369,7 +368,7 @@ class Transformer(tf.keras.Model):
     tar_real = tar[:, 1:]
 
     with tf.GradientTape() as tape:
-      predictions, _, _ = self([inp, tar_inp], training=True)
+      predictions, _ = self([inp, tar_inp], training=True)
       loss = self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
 
     gradients = tape.gradient(loss, self.trainable_variables)
@@ -385,7 +384,7 @@ class Transformer(tf.keras.Model):
     tar_real = tar[:, 1:]
 
     # Compute predictions
-    predictions, _, pointer_data = self([inp, tar_inp], training=False)
+    predictions, auxiliary_outputs = self([inp, tar_inp], training=False)
     # Updates the metrics tracking the loss
     self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
     # Update the metrics.
@@ -393,8 +392,8 @@ class Transformer(tf.keras.Model):
     # Return a dict mapping metric names to current value.
     # Note that it will include the loss (tracked in self.metrics).
     logs = {m.name: m.result() for m in self.metrics}
-    if "p_gen" in pointer_data:
-      logs["avg_p_gen"] = tf.reduce_mean(pointer_data["p_gen"])
+    if "p_gen" in auxiliary_outputs:
+      logs["avg_p_gen"] = tf.reduce_mean(auxiliary_outputs["p_gen"])
     return logs
 
   def get_config(self):

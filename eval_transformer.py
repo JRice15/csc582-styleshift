@@ -18,19 +18,18 @@ from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--path",required=True,help="path to model to load (must end with '.tf')")
+parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
 parser.add_argument("--batchsize",default=64,type=int,help="batchsize during eval")
 parser.add_argument("--nsamples",default=5,type=int,help="number of sample predictions to show")
 parser.add_argument("--samples-only",action="store_true",help="whether to only show samples, not eval on val/test data")
 ARGS = parser.parse_args()
 
-assert ARGS.path.endswith(".tf")
+assert ARGS.dir.endswith("/")
 
 pprint(vars(ARGS))
 
 # load params from json
-params_path = ARGS.path[:-3] + "_params.json"
-with open(params_path, "r") as f:
+with open(ARGS.dir + "params.json", "r") as f:
   TRAIN_PARAMS = json.load(f)
 
 
@@ -45,7 +44,7 @@ custom_objs = {
     "CustomSchedule": CustomSchedule,
 }
 
-model = tf.keras.models.load_model(ARGS.path, custom_objects=custom_objs)
+model = tf.keras.models.load_model(ARGS.dir + "model.tf", custom_objects=custom_objs)
 
 model.summary()
 
@@ -82,7 +81,7 @@ def predict_sentence(transformer, sentence):
     output = tf.transpose(output_array.stack())
     output = output[:,:-1]
 
-    predictions, _, _ = transformer([encoder_input, output], training=False)
+    predictions, _ = transformer([encoder_input, output], training=False)
 
     # select the last token from the seq_len dimension
     predictions = predictions[:, i-1, :]  # (batch_size, vocab_size)
@@ -103,9 +102,9 @@ def predict_sentence(transformer, sentence):
   # `tf.function` prevents us from using the attention_weights that were
   # calculated on the last iteration of the loop. So recalculate them outside
   # the loop.
-  _, attention_weights, p_gen = transformer([encoder_input, output[:,:-1]], training=False)
+  _, auxiliary_outputs = transformer([encoder_input, output[:,:-1]], training=False)
 
-  return text, attention_weights
+  return text, auxiliary_outputs
 
 
 def plot_attention_head(in_tokens, translated_tokens, attention):
@@ -125,7 +124,7 @@ def plot_attention_head(in_tokens, translated_tokens, attention):
   # plt.ylabel("Input")
 
 
-def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_num):
+def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_name):
   fig = plt.figure(figsize=(16, 8))
 
   for h, head in enumerate(attention_heads):
@@ -135,14 +134,14 @@ def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_
 
     ax.set_xlabel(f'Head {h+1}')
 
-  plt.suptitle(f"Attention weights for each head (layer {layer_num})")
+  plt.suptitle(f"Attention weights for each head (layer {layer_name})")
   plt.tight_layout()
   plt.show()
 
   sum_head = attention_heads.sum(axis=0)
   plot_attention_head(in_tokens, translated_tokens, head)
 
-  plt.suptitle(f"Sum of attention heads (layer {layer_num})")
+  plt.suptitle(f"Sum of attention heads (layer {layer_name})")
   plt.tight_layout()
   plt.show()
 
@@ -151,7 +150,7 @@ def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_
 print("Predictions on test set:")
 for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   inpt, target = x_test[i], y_test[i]
-  pred, attn_weights = predict_sentence(model, inpt)
+  pred, auxiliary_outputs = predict_sentence(model, inpt)
 
   inpt = vectorizer.unvectorize(inpt)
   target = vectorizer.unvectorize(target)
@@ -163,17 +162,17 @@ for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   print("Example", i)
   pprint(results)
 
-
   inpt_len = (inpt != PADDING_TOKEN).sum()
   pred_len = (pred != PADDING_TOKEN).sum()
 
-  these_weights = tf.squeeze(attn_weights['decoder_layer2_attn2_weights'], axis=0)
+  last_layer = TRAIN_PARAMS["n_layers"] - 1
+  these_weights = tf.squeeze(auxiliary_outputs[f'decoder_layer{last_layer}_attn2_weights'], axis=0)
 
   plot_attention_weights(
     inpt[:inpt_len],
     pred[:pred_len],
     these_weights[:, :pred_len-1, :inpt_len].numpy(),
-    layer_num="decoder_layer2_attn2",
+    layer_name=f"decoder_layer{last_layer}_attn2",
   )
 
 
@@ -186,16 +185,18 @@ def monkeypatched_test_step(*args, **kwargs):
     return transformer.Transformer.test_step(model, *args, **kwargs)
 model.test_step = monkeypatched_test_step
 
-print("Evaluate val data...")
-pprint(model.evaluate(
-    x_val, y_val, 
-    batch_size=ARGS.batchsize,
-    return_dict=True
-))
 
-print("Evaluate test data...")
-pprint(model.evaluate(
-    x_test, y_test, 
-    batch_size=ARGS.batchsize,
-    return_dict=True
-))
+def eval_on_dataset(x, y, name):
+  print(f"Evaluating {name} data...")
+  results = model.evaluate(
+      x, y, 
+      batch_size=ARGS.batchsize,
+      return_dict=True
+  )
+  pprint(results)
+  with open(ARGS.dir + name + "_results.json", "w") as f:
+    json.dump(results)
+
+eval_on_dataset(x_val, y_val, "val")
+eval_on_dataset(x_test, y_test, "test")
+

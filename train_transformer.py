@@ -2,7 +2,9 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
+import datetime
 import time
 from pprint import pprint
 
@@ -87,7 +89,7 @@ parser.add_argument("--lr-mode",choices=["sched","reduce"],default="sched")
 
 # misc
 parser.add_argument("--test",action="store_true",help="just run a small test version on a few batches of data")
-parser.add_argument("--path",default="models/transformer.tf",help="path tp save model to (must end with '.tf')")
+parser.add_argument("--dir",default="models/transformer/",help="dir to save model in (must end with '/')")
 ARGS = parser.parse_args()
 
 # set preset values which haven't been overridden by cl args
@@ -95,15 +97,28 @@ for name,value in PRESETS[ARGS.preset].items():
   if getattr(ARGS, name) is None:
     setattr(ARGS, name, value)
 
-assert ARGS.path.endswith(".tf")
+assert ARGS.dir.endswith("/")
 
 pprint(vars(ARGS))
 
-os.makedirs("models", exist_ok=True)
+if os.path.exists(ARGS.dir):
+  print("Overwriting existing model at location in 5 seconds:")
+  print(" ", ARGS.dir)
+  time.sleep(5)
+  shutil.rmtree(ARGS.dir)
+else:
+  os.makedirs(ARGS.dir, exist_ok=True)
+
 # save params to json
-params_path = ARGS.path[:-3] + "_params.json"
-with open(params_path, "w") as f:
+with open(ARGS.dir + "params.json", "w") as f:
   json.dump(dict(vars(ARGS)), f, indent=2)
+
+# other metadata
+metadata = {
+  "start": datetime.datetime.now().isoformat()
+}
+with open(ARGS.dir + "metadata.json", "w") as f:
+  json.dump(metadata, f, indent=2)
 
 ### Dataset
 
@@ -135,7 +150,7 @@ model = Transformer(
 sample_x = x_train[:ARGS.batchsize]
 sample_y = y_train[:ARGS.batchsize, :-1]
 print("Building...")
-output, _, _ = model([sample_x, sample_y])
+output, _ = model([sample_x, sample_y])
 print("batch shapes:")
 print(" ", sample_x.shape, sample_y.shape)
 print(" ", sample_x.dtype, sample_y.dtype)
@@ -167,7 +182,7 @@ model.compile(
 print("Training...")
 callback_list = [
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1, min_delta=1e-4),
-  MyModelCheckpoint(ARGS.path, epochs_per_save=1, 
+  MyModelCheckpoint(ARGS.dir + "model.tf", epochs_per_save=1, 
       save_best_only=True, verbose=1),
 ]
 
