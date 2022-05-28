@@ -61,13 +61,16 @@ parser = argparse.ArgumentParser()
 # presets
 parser.add_argument("--preset",default="default",choices=list(PRESETS.keys()))
 
-# model params
+# main transformer params
 parser.add_argument("--n-layers",type=int)
 parser.add_argument("--d-model",type=int,help="dimension units in model")
 parser.add_argument("--d-ff",type=int,help="hidden units in feedforward nets")
 parser.add_argument("--n-heads",type=int,help="number of attention heads")
 parser.add_argument("--d-key",type=int,help="dimension of key in attention")
 parser.add_argument("--dropout",type=int)
+
+# our additions
+parser.add_argument("--use-pointernet",action="store_true")
 
 # data params
 parser.add_argument("--use-glove",action="store_true")
@@ -78,10 +81,10 @@ parser.add_argument("--max-vocab",type=int)
 parser.add_argument("--batchsize",type=int,default=64) 
 parser.add_argument("--epochs",type=int,default=100,help="max number of epochs (if early stopping doesn't occur")
 parser.add_argument("--earlystopping-epochs",type=int,default=2)
-parser.add_argument("--test",action="store_true",help="just run a small test version")
 parser.add_argument("--lr-mode",choices=["sched","reduce"],default="sched")
 
 # misc
+parser.add_argument("--test",action="store_true",help="just run a small test version on a few batches of data")
 parser.add_argument("--path",default="transformer.tf",help="path tp save model to (must end with '.tf')")
 ARGS = parser.parse_args()
 
@@ -121,6 +124,7 @@ model = Transformer(
     vocab_size=vectorizer.vocab_size,
     rate=ARGS.dropout,
     embedding_matrix=embedding_matrix if ARGS.use_glove else None,
+    use_pointer_net=ARGS.use_pointernet,
 )
 
 
@@ -128,7 +132,7 @@ model = Transformer(
 sample_x = x_train[:ARGS.batchsize]
 sample_y = y_train[:ARGS.batchsize, :-1]
 print("Building...")
-output, attn_weights = model([sample_x, sample_y])
+output, _, _ = model([sample_x, sample_y])
 print("batch shapes:")
 print(" ", sample_x.shape, sample_y.shape)
 print(" ", sample_x.dtype, sample_y.dtype)

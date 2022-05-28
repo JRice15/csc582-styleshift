@@ -7,9 +7,11 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow_probability
 
-from const import MAX_SENT_LEN
 
-logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
+from const import MAX_SENT_LEN
+from pointer_net import PointerNet
+
+# logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 """
 From https://github.com/tensorflow/text/blob/master/docs/tutorials/transformer.ipynb
@@ -159,7 +161,7 @@ class DecoderLayer(tf.keras.layers.Layer):
     ffn_output = self.dropout3(ffn_output, training=training)
     out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
 
-    return out3, attn1_weights, attn2_weights
+    return out3, out2, attn1_weights, attn2_weights
 
   def get_config(self):
     return {
@@ -232,14 +234,15 @@ class Decoder(tf.keras.layers.Layer):
 
     attention_weights = {}
     for i in range(self.num_layers):
-      x, attn1_weights, attn2_weights = self.dec_layers[i](x, enc_output, training=training, 
+      # only save and return last decoder state
+      x, dec_state, attn1, attn2 = self.dec_layers[i](x, enc_output, training=training, 
             look_ahead_mask=look_ahead_mask, padding_mask=padding_mask)
 
-      attention_weights[f"decoder_layer{i}_attn1_weights"] = attn1_weights
-      attention_weights[f"decoder_layer{i}_attn2_weights"] = attn2_weights
+      attention_weights[f"decoder_layer{i}_attn1_weights"] = attn1
+      attention_weights[f"decoder_layer{i}_attn2_weights"] = attn2
 
     # x.shape == (batch_size, target_seq_len, d_model)
-    return x, attention_weights
+    return x, dec_state, attention_weights
 
   def get_config(self):
     return {
@@ -259,10 +262,15 @@ class Transformer(tf.keras.Model):
   """
   args:
     embedding_matrix: optional, pretrained embedding matrix for words, in which case we will use that as untrainable embedding weights
+  
+  call() returns:
+    predicted tokens
+    attn weights: dict
+    pointer data: dict, containing pointer_logits and p_gen
   """
 
   def __init__(self, *, num_layers, num_heads, d_model, d_key, d_ff, vocab_size,
-                rate=0.1, embedding_matrix=None, **kwargs):
+                rate=0.1, embedding_matrix=None, use_pointer_net=False, **kwargs):
     super().__init__(**kwargs)
     self.num_layers = num_layers
     self.d_model = d_model
@@ -271,6 +279,7 @@ class Transformer(tf.keras.Model):
     self.d_ff = d_ff
     self.rate = rate
     self.vocab_size = vocab_size
+    self.use_pointer_net = use_pointer_net
 
     # constant pos encoding
     self.pos_encoding = positional_encoding(MAX_SENT_LEN, d_model)
@@ -295,33 +304,49 @@ class Transformer(tf.keras.Model):
                            rate=rate)
     self.final_layer = tf.keras.layers.Dense(vocab_size)
 
+    # pointer-generator
+    if self.use_pointer_net:
+      self.pointer_net = PointerNet(vocab_size=vocab_size)
+
   def call(self, inputs, training):
     # Keras models prefer if you pass all your inputs in the first argument
-    inp, tar = inputs
+    inp_tokens, tar_tokens = inputs
 
-    padding_mask, look_ahead_mask = self.create_masks(inp, tar)
+    padding_mask, look_ahead_mask = self.create_masks(inp_tokens, tar_tokens)
 
     ### Encoder
-    seq_len = tf.shape(inp)[1]
-    inp = self.embedding_layer(inp)  # (batch_size, input_seq_len, d_model)
-    inp *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-    inp += self.pos_encoding[:, :seq_len, :]
+    seq_len = tf.shape(inp_tokens)[1]
+    inp_emb = self.embedding_layer(inp_tokens)  # (batch_size, input_seq_len, d_model)
+    inp_emb *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+    inp_emb += self.pos_encoding[:, :seq_len, :]
 
-    enc_output = self.encoder(inp, training=training, mask=padding_mask)
-    # (batch_size, inp_seq_len, d_model)
+    enc_output = self.encoder(inp_emb, training=training, mask=padding_mask)
+    # enc_output.shape: (batch_size, inp_seq_len, d_model)
 
     ### Decoder
-    seq_len = tf.shape(tar)[1]
-    tar = self.embedding_layer(tar)  # (batch_size, input_seq_len, d_model)
-    tar *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-    tar += self.pos_encoding[:, :seq_len, :]
+    seq_len = tf.shape(tar_tokens)[1]
+    tar_emb = self.embedding_layer(tar_tokens)  # (batch_size, tar_seq_len, d_model)
+    tar_emb *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+    tar_emb += self.pos_encoding[:, :seq_len, :]
 
-    dec_output, attn_weights = self.decoder(tar, enc_output, training=training, 
-            look_ahead_mask=look_ahead_mask, padding_mask=padding_mask)
-    # dec_output.shape == (batch_size, tar_seq_len, d_model)
+    dec_output, dec_state, attn_weights = self.decoder(tar_emb, enc_output, 
+            training=training, look_ahead_mask=look_ahead_mask, padding_mask=padding_mask)
+    # dec_output.shape: (batch_size, tar_seq_len, d_model)
 
     final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
-    return final_output, attn_weights
+
+    ### Pointer-Generator mechanism
+    if self.use_pointer_net:
+      last_layer = self.num_layers - 1
+      last_attn = attn_weights[f"decoder_layer{last_layer}_attn2_weights"]
+
+      final_output, pointer_data = self.pointer_net(inp_tokens=inp_tokens, tar_embedded=tar_emb,
+            generator_output=final_output, enc_output=enc_output, dec_state=dec_state, 
+            attn_heads=last_attn)
+    else:
+      pointer_data = {}
+
+    return final_output, attn_weights, pointer_data
 
   def create_masks(self, inp, tar):
     # Encoder padding mask (Used in the 2nd attention block in the decoder too.)
@@ -344,7 +369,7 @@ class Transformer(tf.keras.Model):
     tar_real = tar[:, 1:]
 
     with tf.GradientTape() as tape:
-      predictions, _ = self([inp, tar_inp], training=True)
+      predictions, _, _ = self([inp, tar_inp], training=True)
       loss = self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
 
     gradients = tape.gradient(loss, self.trainable_variables)
@@ -360,14 +385,17 @@ class Transformer(tf.keras.Model):
     tar_real = tar[:, 1:]
 
     # Compute predictions
-    predictions, _ = self([inp, tar_inp], training=False)
+    predictions, _, pointer_data = self([inp, tar_inp], training=False)
     # Updates the metrics tracking the loss
     self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
     # Update the metrics.
     self.compiled_metrics.update_state(tar_real, predictions)
     # Return a dict mapping metric names to current value.
     # Note that it will include the loss (tracked in self.metrics).
-    return {m.name: m.result() for m in self.metrics}
+    logs = {m.name: m.result() for m in self.metrics}
+    if "p_gen" in pointer_data:
+      logs["avg_p_gen"] = tf.reduce_mean(pointer_data["p_gen"])
+    return logs
 
   def get_config(self):
     # if loading from config, we don't need to specify the embedding matrix 
@@ -380,6 +408,7 @@ class Transformer(tf.keras.Model):
       "d_ff": self.d_ff,
       "rate": self.rate,
       "vocab_size": self.vocab_size,
+      "use_pointer_net": self.use_pointer_net,
       **super().get_config(),
     }
 

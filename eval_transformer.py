@@ -59,7 +59,7 @@ dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=Tr
 x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 # build
-result, attn = model([x_train[:ARGS.batchsize], y_train[:ARGS.batchsize, :-1]])
+result = model([x_train[:ARGS.batchsize], y_train[:ARGS.batchsize, :-1]])
 
 
 def predict_sentence(transformer, sentence):
@@ -82,7 +82,7 @@ def predict_sentence(transformer, sentence):
     output = tf.transpose(output_array.stack())
     output = output[:,:-1]
 
-    predictions, _ = transformer([encoder_input, output], training=False)
+    predictions, _, _ = transformer([encoder_input, output], training=False)
 
     # select the last token from the seq_len dimension
     predictions = predictions[:, i-1, :]  # (batch_size, vocab_size)
@@ -103,7 +103,7 @@ def predict_sentence(transformer, sentence):
   # `tf.function` prevents us from using the attention_weights that were
   # calculated on the last iteration of the loop. So recalculate them outside
   # the loop.
-  _, attention_weights = transformer([encoder_input, output[:,:-1]], training=False)
+  _, attention_weights, p_gen = transformer([encoder_input, output[:,:-1]], training=False)
 
   return text, attention_weights
 
