@@ -195,7 +195,7 @@ def eval_on_dataset(x, y, name):
   )
   pprint(results)
   with open(ARGS.dir + name + "_results.json", "w") as f:
-    json.dump(results)
+    json.dump(results, f)
 
 eval_on_dataset(x_val, y_val, "val")
 eval_on_dataset(x_test, y_test, "test")
