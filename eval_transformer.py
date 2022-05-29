@@ -15,7 +15,7 @@ from const import MAX_SENT_LEN, START_TOKEN, END_TOKEN, PADDING_TOKEN, SPECIAL_T
 from load_data import load_preprocessed_sent_data
 import transformer
 from transformer_utils import CustomSchedule, loss_function, accuracy_metric
-
+from pointer_net import PointerNet
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
@@ -42,6 +42,7 @@ custom_objs = {
     "loss_function": loss_function,
     "accuracy_metric": accuracy_metric,
     "CustomSchedule": CustomSchedule,
+    "PointerNet": PointerNet,
 }
 
 model = tf.keras.models.load_model(ARGS.dir + "model.tf", custom_objects=custom_objs)

@@ -334,6 +334,7 @@ class Transformer(tf.keras.Model):
     # dec_output.shape: (batch_size, tar_seq_len, d_model)
 
     final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
+    final_output = tf.math.softmax(final_output, axis=-1)
 
     ### Pointer-Generator mechanism
     if self.use_pointer_net:
@@ -368,13 +369,15 @@ class Transformer(tf.keras.Model):
     tar_real = tar[:, 1:]
 
     with tf.GradientTape() as tape:
-      predictions, _ = self([inp, tar_inp], training=True)
+      predictions, auxiliary_outputs = self([inp, tar_inp], training=True)
       loss = self.compiled_loss(tar_real, predictions, regularization_losses=self.losses)
 
     gradients = tape.gradient(loss, self.trainable_variables)
     self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
     self.compiled_metrics.update_state(tar_real, predictions)
+    # Return a dict mapping metric names to current value.
+    # Note that it will include the loss (tracked in self.metrics).
     return {m.name: m.result() for m in self.metrics}
 
   def test_step(self, data):
@@ -391,10 +394,7 @@ class Transformer(tf.keras.Model):
     self.compiled_metrics.update_state(tar_real, predictions)
     # Return a dict mapping metric names to current value.
     # Note that it will include the loss (tracked in self.metrics).
-    logs = {m.name: m.result() for m in self.metrics}
-    if "p_gen" in auxiliary_outputs:
-      logs["avg_p_gen"] = tf.reduce_mean(auxiliary_outputs["p_gen"])
-    return logs
+    return {m.name: m.result() for m in self.metrics}
 
   def get_config(self):
     # if loading from config, we don't need to specify the embedding matrix 

@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability
 
 
 # class ScalarDense()
@@ -13,17 +12,6 @@ class PointerNet(tf.keras.layers.Layer):
         self.vocab_size = vocab_size
 
         self.p_gen_dense = tf.keras.layers.Dense(1)
-
-        self.pointer_scale_w = tf.Variable(
-            initial_value=1.0,
-            name="pointer_scale_weight",
-            trainable=True,
-        )
-        self.pointer_scale_b = tf.Variable(
-            initial_value=0.0,
-            name="pointer_scale_bias",
-            trainable=True,
-        )
     
     def call(self, inp_tokens, tar_embedded, generator_output, enc_output, 
             dec_state, attn_heads):
@@ -50,29 +38,34 @@ class PointerNet(tf.keras.layers.Layer):
         # average over heads
         attn = tf.reduce_mean(attn_heads, axis=1) # (B, T, I)
 
-        ### P_gen
+        ### Probability of generating vs pointing, P_gen
         context = tf.einsum("bti,bid->btd", attn, enc_output)
         p_gen_inputs = tf.concat([context, dec_state, tar_embedded], axis=-1) # (B, T, D*3)
 
         p_gen = self.p_gen_dense(p_gen_inputs) # (B, T, 1)
         p_gen = tf.math.sigmoid(p_gen) # (B, T, 1)
 
+        # regularize against p_gen values <0.05 or >0.95
+        # this loss maxes out at 0.5, for p_gen == 1 or 0. The constant factor at the start controls the steepness of the loss
+        p_gen_loss = 10 * tf.nn.relu(tf.abs(p_gen - 0.5) - 0.45)
+        p_gen_loss = tf.reduce_mean(p_gen_loss)
+        self.add_loss(p_gen_loss)
+        self.add_metric(p_gen_loss, name="pgen_reg_loss")
+        self.add_metric(tf.reduce_mean(p_gen), name="pgen_avg")
+
         ### Pointer output
         inp = tf.one_hot(inp_tokens, depth=self.vocab_size) # (B, I, V)
-        pointer_output = tf.einsum("bti,biv->btv", attn, inp)
-        # scale the [0,1] constrained pointer_output into some logit space that hopefully is approximates the space of generator_output
-        pointer_output = tf.nn.log_softmax(pointer_output, axis=-1)
-        pointer_output = (self.pointer_scale_w * pointer_output) + self.pointer_scale_b
+        pointer_output = tf.einsum("bti,biv->btv", attn, inp) # (B, T, V)
+        pointer_output = tf.math.softmax(pointer_output, axis=-1) # (B, T, V)
 
-        ### Final outputs (summing in logit space)
-        final_output = (p_gen * generator_output) + ((1 - p_gen) * pointer_output)
+        ### Final outputs 
+        final_output = (p_gen * generator_output) + ((1 - p_gen) * pointer_output) # (B, T, V)
 
         pointer_data = {
-            "pointer_logits": pointer_output,
+            "pointer_distribution": pointer_output,
             "p_gen": tf.squeeze(p_gen, axis=-1)
         }
         return final_output, pointer_data
-        
 
     def get_config(self):
         return {
