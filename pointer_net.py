@@ -44,26 +44,30 @@ class PointerNet(tf.keras.layers.Layer):
 
         p_gen = self.p_gen_dense(p_gen_inputs) # (B, T, 1)
         p_gen = tf.math.sigmoid(p_gen) # (B, T, 1)
+        self.add_metric(tf.reduce_mean(p_gen), name="pgen_avg")
 
         # regularize against p_gen values <0.05 or >0.95
         # this loss maxes out at 0.5, for p_gen == 1 or 0. The constant factor at the start controls the steepness of the loss
-        p_gen_loss = 10 * tf.nn.relu(tf.abs(p_gen - 0.5) - 0.45)
-        p_gen_loss = tf.reduce_mean(p_gen_loss)
-        self.add_loss(p_gen_loss)
-        self.add_metric(p_gen_loss, name="pgen_reg_loss")
-        self.add_metric(tf.reduce_mean(p_gen), name="pgen_avg")
+        # p_gen_loss = 10 * tf.nn.relu(tf.abs(p_gen - 0.5) - 0.45)
+        # p_gen_loss = tf.reduce_mean(p_gen_loss)
+        # self.add_loss(p_gen_loss)
+        # self.add_metric(p_gen_loss, name="pgen_reg_loss")
 
         ### Pointer output
         inp = tf.one_hot(inp_tokens, depth=self.vocab_size) # (B, I, V)
+        # dividing by total along vocab results in a prob distribution that sums to one
+        inp = inp / tf.reduce_sum(inp, axis=-1, keepdims=True)
+        # weighting by attn maintains the sum-to-one property, because attn weights 
+        # are softmaxed over the I dimension
         pointer_output = tf.einsum("bti,biv->btv", attn, inp) # (B, T, V)
-        pointer_output = tf.math.softmax(pointer_output, axis=-1) # (B, T, V)
 
         ### Final outputs 
         final_output = (p_gen * generator_output) + ((1 - p_gen) * pointer_output) # (B, T, V)
 
         pointer_data = {
             "pointer_distribution": pointer_output,
-            "p_gen": tf.squeeze(p_gen, axis=-1)
+            "p_gen": tf.squeeze(p_gen, axis=-1),
+            "p2": tf.math.softmax(pointer_output, axis=-1),
         }
         return final_output, pointer_data
 
