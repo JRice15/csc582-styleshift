@@ -67,7 +67,6 @@ class PointerNet(tf.keras.layers.Layer):
         pointer_data = {
             "pointer_distribution": pointer_output,
             "p_gen": tf.squeeze(p_gen, axis=-1),
-            "p2": tf.math.softmax(pointer_output, axis=-1),
         }
         return final_output, pointer_data
 
