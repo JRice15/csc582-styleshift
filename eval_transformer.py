@@ -19,7 +19,7 @@ from pointer_net import PointerNet
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
-parser.add_argument("--batchsize",default=64,type=int,help="batchsize during eval")
+# parser.add_argument("--batchsize",default=64,type=int,help="batchsize during eval")
 parser.add_argument("--nsamples",default=5,type=int,help="number of sample predictions to show")
 parser.add_argument("--samples-only",action="store_true",help="whether to only show samples, not eval on val/test data")
 ARGS = parser.parse_args()
@@ -31,6 +31,8 @@ pprint(vars(ARGS))
 # load params from json
 with open(ARGS.dir + "params.json", "r") as f:
   TRAIN_PARAMS = json.load(f)
+
+setattr(ARGS, "batchsize", TRAIN_PARAMS["batchsize"])
 
 
 custom_objs = {
@@ -149,6 +151,7 @@ def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_
 
 
 print("Predictions on test set:")
+# for i in range(ARGS.nsamples):
 for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   inpt, target = x_test[i], y_test[i]
   pred, auxiliary_outputs = predict_sentence(model, inpt)
