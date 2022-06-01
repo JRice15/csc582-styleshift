@@ -22,6 +22,7 @@ parser.add_argument("--dir",required=True,help="dir to load model from (must end
 # parser.add_argument("--batchsize",default=64,type=int,help="batchsize during eval")
 parser.add_argument("--nsamples",default=5,type=int,help="number of sample predictions to show")
 parser.add_argument("--samples-only",action="store_true",help="whether to only show samples, not eval on val/test data")
+parser.add_argument("--no-plots",action="store_true",help="whether to not make plots")
 ARGS = parser.parse_args()
 
 assert ARGS.dir.endswith("/")
@@ -162,22 +163,25 @@ for i in np.random.choice(len(x_test), size=ARGS.nsamples):
     "inpt": " ".join(inpt).strip(),
     "targ": " ".join(target).strip(),
     "pred": " ".join(pred).strip(), 
+    "copied input?": (pred == inpt).all(),
   }
   print("Example", i)
   pprint(results)
 
-  inpt_len = (inpt != PADDING_TOKEN).sum()
-  pred_len = (pred != PADDING_TOKEN).sum()
+  # attention plots
+  if not ARGS.no_plots:
+    inpt_len = (inpt != PADDING_TOKEN).sum()
+    pred_len = (pred != PADDING_TOKEN).sum()
 
-  last_layer = TRAIN_PARAMS["n_layers"] - 1
-  these_weights = tf.squeeze(auxiliary_outputs[f'decoder_layer{last_layer}_attn2_weights'], axis=0)
+    last_layer = TRAIN_PARAMS["n_layers"] - 1
+    these_weights = tf.squeeze(auxiliary_outputs[f'decoder_layer{last_layer}_attn2_weights'], axis=0)
 
-  plot_attention_weights(
-    inpt[:inpt_len],
-    pred[:pred_len],
-    these_weights[:, :pred_len-1, :inpt_len].numpy(),
-    layer_name=f"decoder_layer{last_layer}_attn2",
-  )
+    plot_attention_weights(
+      inpt[:inpt_len],
+      pred[:pred_len],
+      these_weights[:, :pred_len-1, :inpt_len].numpy(),
+      layer_name=f"decoder_layer{last_layer}_attn2",
+    )
 
 
 if ARGS.samples_only:
