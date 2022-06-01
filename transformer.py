@@ -346,6 +346,12 @@ class Transformer(tf.keras.Model):
             attn_heads=last_attn)
       auxiliary_outputs.update(pointer_data)
 
+    ## metric for how often the network fully copies the input
+    # pred_tokens = tf.argmax(final_output, axis=-1)
+    # is_copy = tf.math.logical_or(inp_tokens == pred_tokens, 1-padding_mask)
+    # is_copy = tf.reduce_all(is_copy, axis=-1)
+    # self.add_metric(tf.reduce_mean(is_copy), name="frac_copy")
+
     return final_output, auxiliary_outputs
 
   def create_masks(self, inp, tar):

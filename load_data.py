@@ -8,6 +8,18 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from preprocess import TextTokenizer, TextVectorizer
 from const import MAX_SENT_LEN, PADDING_TOKEN, START_TOKEN, END_TOKEN, MAX_WORD_LEN
 
+BAD_TITLE_PREFIXES = [
+    # wiki internals pages that should not be included
+    "Template:",
+    "Wikipedia:",
+    "Category:",
+    "MediaWiki:",
+    "Help:",
+]
+
+@np.vectorize
+def is_ok_title(title):
+    return not any(title.startswith(x) for x in BAD_TITLE_PREFIXES)
 
 def read_data_tsv(filename, cols=("title", "para", "text")):
     df = pd.read_csv(filename, sep="\t", header=None)
@@ -25,6 +37,8 @@ def read_data(kind="sentence"):
     normal = read_data_tsv("data/{}-aligned.v2/normal.aligned".format(kind), cols=("title", "para", "normal"))
     normal = normal.drop(columns=["title", "para"])
     df = pd.concat([simple, normal], axis=1)
+    # filter out bad pages
+    df = df[is_ok_title(df["title"])]
     return df
 
 def load_glove_embeddings(embedding_dim):
