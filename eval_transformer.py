@@ -16,13 +16,14 @@ from load_data import load_preprocessed_sent_data
 import transformer
 from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 from pointer_net import PointerNet
+import beam_search
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
 # parser.add_argument("--batchsize",default=64,type=int,help="batchsize during eval")
 parser.add_argument("--nsamples",default=5,type=int,help="number of sample predictions to show")
 parser.add_argument("--samples-only",action="store_true",help="whether to only show samples, not eval on val/test data")
-parser.add_argument("--no-plots",action="store_true",help="whether to not make plots")
+parser.add_argument("--noplots",action="store_true",help="whether to not make plots")
 ARGS = parser.parse_args()
 
 assert ARGS.dir.endswith("/")
@@ -56,59 +57,13 @@ model.summary()
 # vocab_size = model.final_layer.units - len(SPECIAL_TOKENS)
 # print("vocab size:", vocab_size)
 # get data
-dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
+datasets, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
                           start_end_tokens=True, max_vocab=TRAIN_PARAMS["max_vocab"],
                           show_example=False)
-x_train, y_train, x_val, y_val, x_test, y_test = dataset
+x_train, y_train, x_val, y_val, x_test, y_test = datasets
 
 # build
 result = model([x_train[:ARGS.batchsize], y_train[:ARGS.batchsize, :-1]])
-
-
-def predict_sentence(transformer, sentence):
-  encoder_input = sentence[tf.newaxis]
-
-  # As the output language is english, initialize the output with the
-  # english start token.
-  start = vectorizer.vectorize([START_TOKEN])
-  end = vectorizer.vectorize([END_TOKEN])
-  pad = vectorizer.vectorize([PADDING_TOKEN])
-
-  # `tf.TensorArray` is required here (instead of a python list) so that the
-  # dynamic-loop can be traced by `tf.function`.
-  output_array = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
-  output_array = output_array.write(0, start)
-  for i in tf.range(1, MAX_SENT_LEN):
-    output_array = output_array.write(i, pad)
-
-  for i in tf.range(1, MAX_SENT_LEN):
-    output = tf.transpose(output_array.stack())
-    output = output[:,:-1]
-
-    predictions, _ = transformer([encoder_input, output], training=False)
-
-    # select the last token from the seq_len dimension
-    predictions = predictions[:, i-1, :]  # (batch_size, vocab_size)
-
-    predicted_id = tf.argmax(predictions, axis=-1, output_type=tf.int32)
-
-    # concatentate the predicted_id to the output which is given to the decoder
-    # as its input.
-    output_array = output_array.write(i, predicted_id)
-
-    if predicted_id == end:
-      break
-
-  output = tf.transpose(output_array.stack())
-  # output.shape (1, tokens)
-  text = vectorizer.unvectorize(output)[0]
-
-  # `tf.function` prevents us from using the attention_weights that were
-  # calculated on the last iteration of the loop. So recalculate them outside
-  # the loop.
-  _, auxiliary_outputs = transformer([encoder_input, output[:,:-1]], training=False)
-
-  return text, auxiliary_outputs
 
 
 def plot_attention_head(in_tokens, translated_tokens, attention):
@@ -153,12 +108,14 @@ def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_
 
 print("Predictions on test set:")
 # for i in range(ARGS.nsamples):
+
 for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   inpt, target = x_test[i], y_test[i]
-  pred, auxiliary_outputs = predict_sentence(model, inpt)
+  pred, auxiliary_outputs = beam_search.predict_sentences(model, inpt, vectorizer)
 
   inpt = vectorizer.unvectorize(inpt)
   target = vectorizer.unvectorize(target)
+  pred = vectorizer.unvectorize(pred)[0]
   results = {
     "inpt": " ".join(inpt).strip(),
     "targ": " ".join(target).strip(),
@@ -169,7 +126,7 @@ for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   pprint(results)
 
   # attention plots
-  if not ARGS.no_plots:
+  if not ARGS.noplots:
     inpt_len = (inpt != PADDING_TOKEN).sum()
     pred_len = (pred != PADDING_TOKEN).sum()
 

@@ -52,7 +52,7 @@ class TextVectorizer:
 
         n_special = len(SPECIAL_TOKENS)
         # +N because those indexes are is reserved for unknown tokens
-        self.word_to_index = {word: index+n_special for index,word in enumerate(sorted(vocab))}
+        self.word_to_index = {word: index+n_special for index,word in enumerate(vocab)}
         for i,tok in enumerate(SPECIAL_TOKENS):
             assert tok not in self.word_to_index
             assert i not in self.word_to_index.values()
@@ -70,25 +70,15 @@ class TextVectorizer:
         assert len(self.index_to_word) == len(self.word_to_index)
         assert self._vec_f("THIS_TOKEN_DEFINITELY_DOES_NOT_APPEAR") == oov_index
         assert self._vec_f(PADDING_TOKEN) == 0
-        assert self._vec_f("the") > n_special
+        # assert self._vec_f("the") == n_special
 
-        self._oov_conversions = 0
-        self._total_conversions = 0
 
     def vectorize(self, array):
         """
         convert string array to int array
         """
-        result = self._vec_f(array)
-        oov_count = (result == self.word_to_index[OOV_TOKEN]).sum()
-        nonpad_count = (result != self.word_to_index[PADDING_TOKEN]).sum()
-        self._oov_conversions += oov_count
-        self._total_conversions += nonpad_count
-        return result
+        return self._vec_f(array)
 
     def unvectorize(self, array):
         return self._unvec_f(array)
 
-    @property
-    def oov_rate(self):
-        return self._oov_conversions / self._total_conversions

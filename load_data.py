@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 from preprocess import TextTokenizer, TextVectorizer
-from const import MAX_SENT_LEN, PADDING_TOKEN, START_TOKEN, END_TOKEN, MAX_WORD_LEN
+from const import MAX_SENT_LEN, PADDING_TOKEN, START_TOKEN, END_TOKEN, MAX_WORD_LEN, OOV_TOKEN
 
 BAD_TITLE_PREFIXES = [
     # wiki internals pages that should not be included
@@ -20,6 +20,20 @@ BAD_TITLE_PREFIXES = [
 @np.vectorize
 def is_ok_title(title):
     return not any(title.startswith(x) for x in BAD_TITLE_PREFIXES)
+
+BAD_TEXT_PATTERNS = [
+    "jpg thumb",
+    "JPG thumb",
+    "gif thumb",
+    "png thumb",
+    "svg thumb",
+]
+
+@np.vectorize
+def is_ok_text(text):
+    return not any(x in text for x in BAD_TEXT_PATTERNS)
+
+
 
 def read_data_tsv(filename, cols=("title", "para", "text")):
     df = pd.read_csv(filename, sep="\t", header=None)
@@ -39,6 +53,9 @@ def read_data(kind="sentence"):
     df = pd.concat([simple, normal], axis=1)
     # filter out bad pages
     df = df[is_ok_title(df["title"])]
+    # filter out bad text
+    all_text = df["normal"] + " " + df["simple"]
+    df = df[is_ok_text(all_text)]
     return df
 
 def load_glove_embeddings(embedding_dim):
@@ -68,18 +85,21 @@ def make_embedding_matrix(embedding_dim, vectorizer):
 
 
 def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_tokens=False,
-        max_vocab=None, show_example=True):
+        max_vocab=None, show_example=True, return_raw_test=False):
     """
     args:
         target: "label" or "simple"
         drop_equal: bool, whether to drop sentences that are the same
         start_end_tokens: bool, whether to include a start and end token at the beginning at end of each sentence
+        return_raw_test: whether to return the raw test data (pre-OOV vectorization)
     returns:
         tuple(x_train, y_train, x_val, y_val, x_test, y_test)
         vectorizer
+        (optional) raw test: tuple of (raw normal, raw simple), each is: list of list of str
     """
     print("Loading data...")
     data = read_data("sentence")
+    print(len(data), "paired sentences found")
 
     tokenizer = TextTokenizer(use_start_end_tokens=start_end_tokens)
 
@@ -124,30 +144,39 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
 
     vectorizer = TextVectorizer(max_vocab=max_vocab)
 
+    X_normal = vectorizer.vectorize(X_normal)
+    X_simple = vectorizer.vectorize(X_simple)
+
     if show_example:
         print("example vectorized:")
-        print(" ", vectorizer.vectorize([X_normal[8192]]))
+        print(" ", [X_normal[8192]])
+
+    oov_vec_id = vectorizer.vectorize(OOV_TOKEN)
+    padding_vec_id = vectorizer.vectorize(PADDING_TOKEN)
+    oov_count = (X_normal == oov_vec_id).sum() + (X_simple == oov_vec_id).sum()
+    total_count = (X_normal != padding_vec_id).sum() + (X_simple !=padding_vec_id).sum()
+    print("Vectorizing OOV rate (fraction):", oov_count / total_count)
 
     # 20% testing, ~10% validation
     train_inds, test_inds = train_test_split(np.arange(len(X_normal)), test_size=0.2, random_state=1)
     train_inds, val_inds = train_test_split(train_inds, test_size=0.1, random_state=1)
 
+    set_names = ["x_train", "y_train", "x_val", "y_val", "x_test", "y_test"]
     datasets = []
 
-    set_names = ["x_train", "y_train", "x_val", "y_val", "x_test", "y_test"]
     for indexes in (train_inds, val_inds, test_inds):
 
         if target == "label":
             X = np.concatenate([X_normal[indexes], X_simple[indexes]], axis=0, dtype=np.str_)
             Y = np.concatenate([np.ones(len(indexes)), np.zeros(len(indexes))], axis=0)
             # convert strings to ints
-            X = vectorizer.vectorize(X)
+            # X = vectorizer.vectorize(X)
         elif target == "simple":
             X = X_normal[indexes]
             Y = X_simple[indexes]
             # convert strings to ints
-            X = vectorizer.vectorize(X)
-            Y = vectorizer.vectorize(Y)
+            # X = vectorizer.vectorize(X)
+            # Y = vectorizer.vectorize(Y)
         else:
             raise ValueError(f"unknown target argument '{target}'")
         
@@ -157,9 +186,12 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
     for name, ds in zip(set_names, datasets):
         print(" ", name, ds.shape)
 
-    print("OOV rate when vectorizing data:", vectorizer.oov_rate)
+    datasets = tuple([tf.constant(x, dtype=tf.int32) for x in datasets])
 
-    datasets = [tf.constant(x, dtype=tf.int32) for x in datasets]
-
-    return tuple(datasets), vectorizer
+    if return_raw_test:
+        raw_normal = data.normal.iloc[test_inds].to_list()
+        raw_simple = data.simple.iloc[test_inds].to_list()
+        raw = (raw_normal, raw_simple)
+        return datasets, vectorizer, raw
+    return datasets, vectorizer
 
