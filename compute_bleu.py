@@ -18,7 +18,7 @@ from load_data import load_preprocessed_sent_data
 import transformer
 from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 from pointer_net import PointerNet
-import beam_search
+import prediction
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
@@ -57,6 +57,15 @@ _, _, _, _, x_test, y_test = datasets
 x_test_raw, y_test_raw = raw_test_data
 
 
-preds, aux_outputs = beam_search.predict_sentences(model, x_test, vectorizer, batchsize=ARGS.batchsize)
+x_test = x_test[:2]
+x_test_raw = x_test_raw[:2]
+y_test_raw = y_test_raw[:2]
+
+last_layer = TRAIN_PARAMS["n_layers"] - 1
+preds, attn = prediction.greedy_predict(model, x_test, vectorizer, 
+                        batchsize=2, #ARGS.batchsize
+                        attn_key=f"decoder_layer{last_layer}_attn2_weights",
+                      )
 
 print(preds.shape)
+print(attn.shape)

@@ -16,7 +16,7 @@ from load_data import load_preprocessed_sent_data
 import transformer
 from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 from pointer_net import PointerNet
-import beam_search
+import prediction
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
@@ -107,11 +107,14 @@ def plot_attention_weights(in_tokens, translated_tokens, attention_heads, layer_
 
 
 print("Predictions on test set:")
-# for i in range(ARGS.nsamples):
 
+last_layer = TRAIN_PARAMS["n_layers"] - 1
+attn_key = f"decoder_layer{last_layer}_attn2_weights"
+
+# for i in range(ARGS.nsamples):
 for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   inpt, target = x_test[i], y_test[i]
-  pred, auxiliary_outputs = beam_search.predict_sentences(model, inpt, vectorizer)
+  pred, attn_heads = prediction.greedy_predict(model, inpt, vectorizer, attn_key=attn_key, batchsize=1)
 
   inpt = vectorizer.unvectorize(inpt)
   target = vectorizer.unvectorize(target)
@@ -130,14 +133,13 @@ for i in np.random.choice(len(x_test), size=ARGS.nsamples):
     inpt_len = (inpt != PADDING_TOKEN).sum()
     pred_len = (pred != PADDING_TOKEN).sum()
 
-    last_layer = TRAIN_PARAMS["n_layers"] - 1
-    these_weights = tf.squeeze(auxiliary_outputs[f'decoder_layer{last_layer}_attn2_weights'], axis=0)
+    attn_heads = tf.squeeze(attn_heads, axis=0)
 
     plot_attention_weights(
       inpt[:inpt_len],
       pred[:pred_len],
-      these_weights[:, :pred_len-1, :inpt_len].numpy(),
-      layer_name=f"decoder_layer{last_layer}_attn2",
+      attn_heads[:, :pred_len-1, :inpt_len].numpy(),
+      layer_name=f"decoder last layer attn",
     )
 
 
