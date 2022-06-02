@@ -137,6 +137,8 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
                 padding="post",
                 truncating="post",
             )
+    if return_raw_test:
+        raw_data = (X_normal, X_simple)
 
     if show_example:
         print("example padded:")
@@ -189,8 +191,8 @@ def load_preprocessed_sent_data(target="label", drop_equal=False, start_end_toke
     datasets = tuple([tf.constant(x, dtype=tf.int32) for x in datasets])
 
     if return_raw_test:
-        raw_normal = data.normal.iloc[test_inds].to_list()
-        raw_simple = data.simple.iloc[test_inds].to_list()
+        raw_normal = raw_data[0][test_inds]
+        raw_simple = raw_data[1][test_inds]
         raw = (raw_normal, raw_simple)
         return datasets, vectorizer, raw
     return datasets, vectorizer

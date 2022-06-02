@@ -114,7 +114,7 @@ attn_key = f"decoder_layer{last_layer}_attn2_weights"
 # for i in range(ARGS.nsamples):
 for i in np.random.choice(len(x_test), size=ARGS.nsamples):
   inpt, target = x_test[i], y_test[i]
-  pred, attn_heads = prediction.greedy_predict(model, inpt, vectorizer, attn_key=attn_key, batchsize=1)
+  pred, attn_heads = prediction.greedy_predict(model, inpt, attn_key=attn_key, batchsize=1)
 
   inpt = vectorizer.unvectorize(inpt)
   target = vectorizer.unvectorize(target)

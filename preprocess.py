@@ -82,3 +82,15 @@ class TextVectorizer:
     def unvectorize(self, array):
         return self._unvec_f(array)
 
+
+@np.vectorize
+def _np_get_vec_special(tok):
+    return SPECIAL_TOKENS.index(tok)
+
+def get_vectorized_special(tok):
+    """
+    get the vectorization of a special token, as tf.int32
+    """
+    return tf.cast(_np_get_vec_special(tok), tf.int32)
+
+

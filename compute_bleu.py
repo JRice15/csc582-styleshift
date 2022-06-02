@@ -3,6 +3,7 @@ import time
 import json
 import argparse
 from pprint import pprint
+import os
 
 import nltk
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ import prediction
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
+parser.add_argument("--method",default="greedy",choices=["greedy","beam"])
 ARGS = parser.parse_args()
 
 assert ARGS.dir.endswith("/")
@@ -57,15 +59,47 @@ _, _, _, _, x_test, y_test = datasets
 x_test_raw, y_test_raw = raw_test_data
 
 
-x_test = x_test[:2]
-x_test_raw = x_test_raw[:2]
-y_test_raw = y_test_raw[:2]
-
 last_layer = TRAIN_PARAMS["n_layers"] - 1
-preds, attn = prediction.greedy_predict(model, x_test, vectorizer, 
-                        batchsize=2, #ARGS.batchsize
-                        attn_key=f"decoder_layer{last_layer}_attn2_weights",
-                      )
+if ARGS.method == "greedy":
+  preds, attn = prediction.greedy_predict(
+                          model, x_test, 
+                          batchsize=ARGS.batchsize,
+                          attn_key=f"decoder_layer{last_layer}_attn2_weights",
+                        )
+else:
+  raise ValueError("Unknown method")
 
-print(preds.shape)
-print(attn.shape)
+preds = vectorizer.unvectorize(preds)
+attn = attn.numpy()
+
+# turn OOV to real words
+preds = prediction.interpolate_OOV_predictions(preds, x_test_raw, attn)
+
+# strip start/end tokens, padding
+preds = prediction.to_final_sentences(preds)
+refs = prediction.to_final_sentences(y_test_raw)
+refs = [[x] for x in refs] # nltk wants a list of refs for each pred
+
+# compute our bleu
+our_bleu = nltk.translate.bleu_score.corpus_bleu(refs, preds)
+print("Our BLEU:", bleu)
+
+# compute bleu of just copying the inputs
+raw_inputs = prediction.to_final_sentences(x_test_raw)
+inputs_bleu = nltk.translate.bleu_score.corpus_bleu(refs, raw_inputs)
+print("Inputs BLEU:", inputs_bleu)
+
+# initialize or update bleu score results
+result_file = ARGS.dir + "bleu.json"
+if os.path.exists(result_file):
+  with open(result_file, "r") as f:
+    results = json.load(f)
+else:
+  results = {}
+
+results[ARGS.method] = our_bleu
+results["inputs"] = inputs_bleu
+
+with open(result_file, "w") as f:
+  json.dump(results, f)
+
