@@ -23,6 +23,7 @@ import prediction
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir",required=True,help="dir to load model from (must end with '/')")
+parser.add_argument("--subsample",type=int,default=10)
 parser.add_argument("--method",default="greedy",choices=["greedy","beam"])
 ARGS = parser.parse_args()
 
@@ -59,6 +60,12 @@ _, _, _, _, x_test, y_test = datasets
 x_test_raw, y_test_raw = raw_test_data
 
 
+x_test_raw = x_test_raw[::ARGS.subsample]
+y_test_raw = y_test_raw[::ARGS.subsample]
+x_test = x_test[::ARGS.subsample]
+y_test = y_test[::ARGS.subsample]
+
+
 last_layer = TRAIN_PARAMS["n_layers"] - 1
 if ARGS.method == "greedy":
   preds, attn = prediction.greedy_predict(
@@ -82,7 +89,7 @@ refs = [[x] for x in refs] # nltk wants a list of refs for each pred
 
 # compute our bleu
 our_bleu = nltk.translate.bleu_score.corpus_bleu(refs, preds)
-print("Our BLEU:", bleu)
+print("Our BLEU:", our_bleu)
 
 # compute bleu of just copying the inputs
 raw_inputs = prediction.to_final_sentences(x_test_raw)
@@ -90,7 +97,7 @@ inputs_bleu = nltk.translate.bleu_score.corpus_bleu(refs, raw_inputs)
 print("Inputs BLEU:", inputs_bleu)
 
 # initialize or update bleu score results
-result_file = ARGS.dir + "bleu.json"
+result_file = ARGS.dir + f"bleu_subsample{ARGS.subsample}x.json"
 if os.path.exists(result_file):
   with open(result_file, "r") as f:
     results = json.load(f)
