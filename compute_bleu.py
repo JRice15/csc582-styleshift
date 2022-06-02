@@ -106,6 +106,7 @@ else:
 
 results[ARGS.method] = our_bleu
 results["inputs"] = inputs_bleu
+results["total_examples"] = len(x_test_raw)
 
 with open(result_file, "w") as f:
   json.dump(results, f)
