@@ -26,7 +26,7 @@ class TextTokenizer:
 
     def tokenize_sent(self, sent):
         """
-        convert sentence (string) to list of tokens
+        convert list of sentences (string), each string goes to a list of tokens
         """
         words = sent.lower().strip().split()
         words = [self.CUSTOM_TOKEN_TRANSLATIONS.get(w, w) for w in words] # first arg to get is key to find, second arg is the default to use if the key is not found
@@ -70,7 +70,7 @@ class TextVectorizer:
         assert len(self.index_to_word) == len(self.word_to_index)
         assert self._vec_f("THIS_TOKEN_DEFINITELY_DOES_NOT_APPEAR") == oov_index
         assert self._vec_f(PADDING_TOKEN) == 0
-        # assert self._vec_f("the") == n_special
+        assert self._vec_f("the") == n_special
 
 
     def vectorize(self, array):
@@ -87,10 +87,14 @@ class TextVectorizer:
 def _np_get_vec_special(tok):
     return SPECIAL_TOKENS.index(tok)
 
-def get_vectorized_special(tok):
+def get_vectorized_special(tok, as_tf=True):
     """
     get the vectorization of a special token, as tf.int32
     """
-    return tf.cast(_np_get_vec_special(tok), tf.int32)
-
+    result = _np_get_vec_special(tok)
+    if as_tf:
+        return tf.cast(result, tf.int32)
+    if len(result.shape) == 0:
+        return result.item()
+    return result
 

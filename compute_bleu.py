@@ -65,6 +65,8 @@ y_test_raw = y_test_raw[::ARGS.subsample]
 x_test = x_test[::ARGS.subsample]
 y_test = y_test[::ARGS.subsample]
 
+print(f"N examples with {ARGS.subsample}x subsampling:", len(x_test))
+
 
 last_layer = TRAIN_PARAMS["n_layers"] - 1
 if ARGS.method == "greedy":
@@ -73,11 +75,22 @@ if ARGS.method == "greedy":
                           batchsize=ARGS.batchsize,
                           attn_key=f"decoder_layer{last_layer}_attn2_weights",
                         )
+  attn = attn.numpy()
+
+elif ARGS.method == "beam":
+  preds, attn = prediction.beam_search_sentences(
+                    model, x_test, 
+                    beam_size=4,
+                    alpha=0.6,
+                    ngram_blocking=3,
+                    attn_key=f"decoder_layer{last_layer}_attn2_weights",
+              )
+
 else:
   raise ValueError("Unknown method")
 
+
 preds = vectorizer.unvectorize(preds)
-attn = attn.numpy()
 
 # turn OOV to real words
 preds = prediction.interpolate_OOV_predictions(preds, x_test_raw, attn)
@@ -97,17 +110,17 @@ inputs_bleu = nltk.translate.bleu_score.corpus_bleu(refs, raw_inputs)
 print("Inputs BLEU:", inputs_bleu)
 
 # initialize or update bleu score results
-result_file = ARGS.dir + f"bleu_subsample{ARGS.subsample}x.json"
+result_file = ARGS.dir + f"bleu_subsampled{ARGS.subsample}x.json"
 if os.path.exists(result_file):
   with open(result_file, "r") as f:
     results = json.load(f)
 else:
   results = {}
 
-results[ARGS.method] = our_bleu
-results["inputs"] = inputs_bleu
+results["bleu_" + ARGS.method] = our_bleu
+results["bleu_inputs"] = inputs_bleu
 results["total_examples"] = len(x_test_raw)
 
 with open(result_file, "w") as f:
-  json.dump(results, f)
+  json.dump(results, f, indent=2)
 
