@@ -55,6 +55,7 @@ def sents_from_strings(sents):
     return [x.split() for x in sents]
 
 def compute_preds(model, vectorizer, method, *, x_test, x_test_raw):
+    print("Computing predictions with", method, "search...")
     last_layer = TRAIN_PARAMS["n_layers"] - 1
     if method == "greedy":
         preds, attn = prediction.greedy_predict(
@@ -128,7 +129,7 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     else:
         results = {}
 
-    results["bleu_" + ARGS.method] = our_bleu
+    results["bleu_" + method] = our_bleu
     results["bleu_inputs"] = inputs_bleu
     results["total_examples"] = len(x_test_raw)
 
