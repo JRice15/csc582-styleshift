@@ -314,9 +314,8 @@ def to_final_sentences(sentences):
         if END_TOKEN in sent:
             sent = sent[:sent.index(END_TOKEN)]
         if any(x in sent for x in SPECIAL_TOKENS):
-            print([x in sent for x in SPECIAL_TOKENS])
-            print(sent)
-            raise ValueError()
+            print("final sentence still contains special tokens?:", sent)
+            # raise ValueError()
         result.append(sent)
     return result
 
