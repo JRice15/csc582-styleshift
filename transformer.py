@@ -302,7 +302,7 @@ class Transformer(tf.keras.Model):
     self.decoder = Decoder(num_layers=num_layers, d_model=d_model,
                            num_heads=num_heads, d_ff=d_ff, d_key=d_key,
                            rate=rate)
-    self.final_layer = tf.keras.layers.Dense(vocab_size)
+    self.final_layer = tf.keras.layers.Dense(vocab_size, name="output_dense")
 
     # pointer-generator
     if self.use_pointer_net:

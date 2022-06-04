@@ -20,7 +20,7 @@ import transformer
 
 from const import (END_TOKEN, MAX_SENT_LEN, PADDING_TOKEN, SPECIAL_TOKENS,
                    START_TOKEN)
-from load_data import load_preprocessed_sent_data
+from preprocess import load_preprocessed_sent_data
 from pointer_net import PointerNet
 from transformer_utils import CustomSchedule, accuracy_metric, loss_function
 
@@ -111,7 +111,7 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     if method_key not in pred_df.columns:
         preds = compute_preds(model, vectorizer, method=method, x_test=x_test, x_test_raw=x_test_raw)
         pred_df[method_key] = sents_to_strings(preds)
-        pred_df.to_csv(csv_file)
+        pred_df.to_csv(csv_file, index=False)
     else:
         preds = sents_from_strings(pred_df[method_key].to_list())
     
@@ -157,7 +157,7 @@ model.summary()
 
 
 datasets, vectorizer, raw_test_data = load_preprocessed_sent_data(target="simple", drop_equal=True, 
-                        start_end_tokens=True, max_vocab=TRAIN_PARAMS["max_vocab"],
+                        start_end_tokens=True, min_word_freq=TRAIN_PARAMS["min_word_freq"],
                         show_example=False, return_raw_test=True)
 _, _, _, _, x_test, y_test = datasets
 x_test_raw, y_test_raw = raw_test_data

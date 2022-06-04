@@ -1,16 +1,18 @@
+import argparse
+import json
 import logging
 import time
-import json
-import argparse
 from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
-from tqdm import tqdm
 import tensorflow as tf
+from tqdm import tqdm
 
-from const import MAX_SENT_LEN, START_TOKEN, END_TOKEN, PADDING_TOKEN, SPECIAL_TOKENS, OOV_TOKEN
-from preprocess import get_vectorized_special, TextVectorizer
+from const import (END_TOKEN, MAX_SENT_LEN, NUMERIC_TOKEN, OOV_TOKEN,
+                   PADDING_TOKEN, SPECIAL_TOKENS, START_TOKEN)
+from preprocess import TextVectorizer, get_vectorized_special
+
 
 @tf.function
 def _tf_greedy_predict(transformer, input_tokens, *, start, end, pad):
@@ -176,7 +178,6 @@ def beam_search_predict_one(transformer, input_tokens, *, attn_key, beam_size, a
     complete_beams = []
     active_beams = [
         Beam([start], 0, alpha=alpha, ngram_blocking=ngram_blocking, attn=None),
-        # Beam([start], 0, alpha=alpha, ngram_blocking=ngram_blocking), # TEMP
     ]
 
     attn_shape = None
@@ -266,6 +267,7 @@ def beam_search_sentences(transformer, sentences, *, attn_key, beam_size=4, alph
 
 def interpolate_OOV_predictions(preds, x_raw, attn):
     """
+    fill in OOV and NUMERIC with the real tokens in the input that were paid attention to
     args:
         preds: np.array of str
         attn: np.array of attn weights
@@ -274,7 +276,6 @@ def interpolate_OOV_predictions(preds, x_raw, attn):
         # average over heads
         attn = np.mean(attn, axis=1)
     # attn.shape == (n_sentences, pred_len=99, inpt_len=100)
-    
     # pred len is one less bc there is no attention for the first token, the START token
     n_sentences, pred_len, inpt_len = attn.shape
     # add row of all zeros to attn so the shapes work out
@@ -287,12 +288,15 @@ def interpolate_OOV_predictions(preds, x_raw, attn):
         if OOV_TOKEN in pred_i:
             raw_i = x_raw[sent_idx]
             attn_i = attn[sent_idx]
+            # no attention to start/end
+            start_end_mask = (raw_i == START_TOKEN) | (raw_i == END_TOKEN)
+            attn_i[:,start_end_mask] = 0
             # get, for each sentence, for each word generated, what index in the input was paid the most attention
             top_attn_indicies = np.argmax(attn_i, axis=-1)
             # collect the actual strings from those indices
             top_attn = raw_i[top_attn_indicies]
             # combine
-            oov_mask = (pred_i == OOV_TOKEN)
+            oov_mask = (pred_i == OOV_TOKEN) | (pred == NUMERIC_TOKEN)
             result = np.where(oov_mask, top_attn, pred_i)
         else:
             result = pred_i

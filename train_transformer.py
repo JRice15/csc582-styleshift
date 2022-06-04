@@ -16,7 +16,8 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras import backend as K
 
 from const import MAX_SENT_LEN
-from load_data import load_preprocessed_sent_data, make_embedding_matrix
+from preprocess import load_preprocessed_sent_data
+from load_data import make_embedding_matrix
 from tf_utils import MyModelCheckpoint
 from transformer import Transformer
 from transformer_utils import CustomSchedule, accuracy_metric, loss_function
@@ -29,7 +30,7 @@ PRESETS = {
     "n_heads": 8,
     "d_key": 64,
     "dropout": 0.1,
-    "max_vocab": 100_000,
+    "min_word_freq": 3,
   },
   "medium": {
     "n_layers": 2,
@@ -38,7 +39,7 @@ PRESETS = {
     "n_heads": 4,
     "d_key": 64,
     "dropout": 0.1,
-    "max_vocab": 100_000,
+    "min_word_freq": 3,
   },
   "small": {
     "n_layers": 1,
@@ -47,7 +48,7 @@ PRESETS = {
     "n_heads": 2,
     "d_key": 32,
     "dropout": 0.1,
-    "max_vocab": 1_000,
+    "min_word_freq": 10,
   },
   # Baseline in Vaswani et al https://arxiv.org/pdf/1706.03762.pdf
   "orig": {
@@ -57,6 +58,7 @@ PRESETS = {
     "n_heads": 8,
     "d_key": 64,
     "dropout": 0.1,
+    "min_word_freq": 2,
     # "label_smoothing": 0.1
   }
 }
@@ -77,8 +79,8 @@ parser.add_argument("--dropout",type=int)
 parser.add_argument("--use-pointernet",action="store_true")
 
 # data params
-parser.add_argument("--use-glove",action="store_true")
-parser.add_argument("--max-vocab",type=int)
+parser.add_argument("--use-glove",action="store_true") # DEPRECATED?
+parser.add_argument("--min-word-freq",type=int)
 # parser.add_argument("--label-smoothing",type=float,default=0.1,help="e_ls in paper")
 
 # training params
@@ -122,7 +124,7 @@ with open(ARGS.dir + "metadata.json", "w") as f:
 ### Dataset
 
 dataset, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
-                          start_end_tokens=True, max_vocab=ARGS.max_vocab)
+                          start_end_tokens=True, min_word_freq=ARGS.min_word_freq)
 x_train, y_train, x_val, y_val, x_test, y_test = dataset
 
 if ARGS.use_glove:
@@ -180,6 +182,7 @@ model.compile(
 
 print("Training...")
 callback_list = [
+  tf.keras.callbacks.History(), # so we can still access it on a keyboard interrupt (always keep it at index 0)
   tf.keras.callbacks.EarlyStopping(patience=ARGS.earlystopping_epochs, verbose=1, min_delta=1e-4),
   MyModelCheckpoint(ARGS.dir + "model.tf", epochs_per_save=1, 
       save_best_only=True, verbose=1),
@@ -191,7 +194,7 @@ if ARGS.lr_mode == "reduce":
   )
 
 if ARGS.test:
-  size = ARGS.batchsize * 20
+  size = ARGS.batchsize * 10
   x_train = x_train[:size]
   y_train = y_train[:size]
   x_val = x_val[:size]
@@ -199,11 +202,27 @@ if ARGS.test:
   x_test = x_test[:size]
   y_test = y_test[:size]
 
-model.fit(
-  x_train, y_train,
-  validation_data=(x_val, y_val),
-  batch_size=ARGS.batchsize,
-  epochs=ARGS.epochs,
-  callbacks=callback_list,
-)
+try:
+  H = model.fit(
+    x_train, y_train,
+    validation_data=(x_val, y_val),
+    batch_size=ARGS.batchsize,
+    epochs=ARGS.epochs,
+    callbacks=callback_list,
+  )
+except KeyboardInterrupt:
+  H = callback_list[0]
 
+print("\nGenerating plots...")
+
+os.makedirs(ARGS.dir + "training/")
+# save metric plots
+for k in H.history.keys():
+    if not k.startswith("val_"):
+        plt.plot(H.history[k])
+        plt.plot(H.history["val_"+k])
+        plt.legend(['train', 'val'])
+        plt.title(k)
+        plt.xlabel('epoch')
+        plt.savefig(ARGS.dir + "training/"+k+".png")
+        plt.close()

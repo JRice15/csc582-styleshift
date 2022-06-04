@@ -10,7 +10,7 @@ from tensorflow import keras
 from tensorflow.keras import Model, callbacks, layers
 
 from const import MAX_SENT_LEN
-from load_data import load_preprocessed_sent_data, make_embedding_matrix
+from preprocess import load_preprocessed_sent_data, make_embedding_matrix
 from tf_utils import MyModelCheckpoint
 
 parser = argparse.ArgumentParser()
@@ -26,7 +26,7 @@ ARGS = parser.parse_args()
 
 pprint(vars(ARGS))
 
-dataset, vectorizer = load_preprocessed_sent_data(drop_equal=True, target="label")
+dataset, vectorizer = load_preprocessed_sent_data(target="label", drop_equal=True)
 
 embedding_matrix = make_embedding_matrix(ARGS.embedding_dim, vectorizer)
 

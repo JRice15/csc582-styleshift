@@ -12,7 +12,7 @@ import tensorflow_probability
 from sklearn.model_selection import train_test_split
 
 from const import MAX_SENT_LEN, START_TOKEN, END_TOKEN, PADDING_TOKEN, SPECIAL_TOKENS
-from load_data import load_preprocessed_sent_data
+from preprocess import load_preprocessed_sent_data
 import transformer
 from transformer_utils import CustomSchedule, loss_function, accuracy_metric
 from pointer_net import PointerNet
@@ -58,7 +58,7 @@ model.summary()
 # print("vocab size:", vocab_size)
 # get data
 datasets, vectorizer = load_preprocessed_sent_data(target="simple", drop_equal=True, 
-                          start_end_tokens=True, max_vocab=TRAIN_PARAMS["max_vocab"],
+                          start_end_tokens=True, min_word_freq=TRAIN_PARAMS["min_word_freq"],
                           show_example=False)
 x_train, y_train, x_val, y_val, x_test, y_test = datasets
 

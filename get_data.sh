@@ -20,4 +20,4 @@ mkdir data/glove_6B
 mv glove.6B.*.txt data/glove_6B
 
 # compute vocabulary
-awk -F" " '{print $1}' data/glove_6B/glove.6B.50d.txt > data/glove_6B/vocab.txt
+awk -F" " '{print $1}' data/glove_6B/glove.6B.50d.txt > data/glove_6B/glove_vocab.txt
