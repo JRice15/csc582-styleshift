@@ -285,7 +285,7 @@ def interpolate_OOV_predictions(preds, x_raw, attn):
     interpolated = []
     for sent_idx in range(len(preds)):
         pred_i = preds[sent_idx]
-        if OOV_TOKEN in pred_i:
+        if OOV_TOKEN in pred_i or NUMERIC_TOKEN in pred_i:
             raw_i = x_raw[sent_idx]
             attn_i = attn[sent_idx]
             # no attention to start/end
