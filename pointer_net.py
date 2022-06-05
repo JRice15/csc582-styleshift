@@ -1,8 +1,7 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import backend as K
 
-
-# class ScalarDense()
 
 
 class PointerNet(tf.keras.layers.Layer):
@@ -19,7 +18,7 @@ class PointerNet(tf.keras.layers.Layer):
         Following https://aclanthology.org/2020.aacl-srw.13.pdf
 
         shapes:
-        B = batchsize
+        B = batchsize (number of input sentences)
         T = target seq len
         I = input seq len
         H = num heads
@@ -39,29 +38,21 @@ class PointerNet(tf.keras.layers.Layer):
         attn = tf.reduce_mean(attn_heads, axis=1) # (B, T, I)
 
         ### Probability of generating vs pointing, P_gen
-        context = tf.einsum("bti,bid->btd", attn, enc_output)
+        # batch matmul attn with enc output
+        context = tf.matmul(attn, enc_output) # (B, T, D)
         p_gen_inputs = tf.concat([context, dec_state, tar_embedded], axis=-1) # (B, T, D*3)
 
         p_gen = self.p_gen_dense(p_gen_inputs) # (B, T, 1)
         p_gen = tf.math.sigmoid(p_gen) # (B, T, 1)
         self.add_metric(tf.reduce_mean(p_gen), name="pgen_avg")
 
-        # regularize against p_gen values <0.05 or >0.95
-        # this loss maxes out at 0.5, for p_gen == 1 or 0. The constant factor at the start controls the steepness of the loss
-        # p_gen_loss = 10 * tf.nn.relu(tf.abs(p_gen - 0.5) - 0.45)
-        # p_gen_loss = tf.reduce_mean(p_gen_loss)
-        # self.add_loss(p_gen_loss)
-        # self.add_metric(p_gen_loss, name="pgen_reg_loss")
-
         ### Pointer output
-        inp = tf.one_hot(inp_tokens, depth=self.vocab_size) # (B, I, V)
-        # dividing by total along vocab results in a prob distribution that sums to one
-        inp = inp / tf.reduce_sum(inp, axis=-1, keepdims=True)
-        # weighting by attn maintains the sum-to-one property, because attn weights 
-        # are softmaxed over the I dimension
-        pointer_output = tf.einsum("bti,biv->btv", attn, inp) # (B, T, V)
+        inp = tf.one_hot(inp_tokens, depth=self.vocab_size, dtype=K.floatx()) # (B, I, V)
+        # weighting by attn the maintains sum-to-one property over the V dimension, because 
+        # attn weights are softmaxed over the I dimension
+        pointer_output = tf.matmul(attn, inp) # (B, T, V)
 
-        ### Final outputs 
+        ### Final outputs
         final_output = (p_gen * generator_output) + ((1 - p_gen) * pointer_output) # (B, T, V)
 
         pointer_data = {
