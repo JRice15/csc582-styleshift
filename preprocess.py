@@ -25,15 +25,10 @@ class TextTokenizer:
         "-rrb-": ")"
     }
 
-    # contains at least one number, and no letters
-    IS_NUMERIC = re.compile(r"[^a-z]*\d[^a-z]*")
-
     def __init__(self, use_start_end_tokens):
         self.use_start_end_tokens = use_start_end_tokens
 
     def _tokenize_word(self, word):
-        if re.fullmatch(self.IS_NUMERIC, word):
-            return NUMERIC_TOKEN
         return self.CUSTOM_TOKEN_TRANSLATIONS.get(word, word) # first arg to get is key to find, second arg is the default to use if the key is not found
 
     def tokenize_sent(self, sent):
@@ -56,6 +51,9 @@ class TextVectorizer:
         vocab_size: total number of index entries (highest index + n special tokens)
     """
 
+    # contains at least one number, and no letters
+    IS_NUMERIC = re.compile(r"[^a-z]*\d[^a-z]*")
+
     def __init__(self, min_word_freq=3):
         vocab = read_vocab(min_count=min_word_freq)
 
@@ -70,15 +68,24 @@ class TextVectorizer:
         self.index_to_word = {i:w for w,i in self.word_to_index.items()}
 
         oov_index = self.word_to_index[OOV_TOKEN]
-        # default to OOV for words not in map
-        self._vec_f = np.vectorize(lambda x: self.word_to_index.get(x, oov_index))
+        num_index = self.word_to_index[NUMERIC_TOKEN]
+        @np.vectorize
+        def _vec_f(word):
+            if re.fullmatch(self.IS_NUMERIC, word):
+                return num_index
+            # default to OOV for words not in map
+            self.word_to_index.get(x, oov_index)
+        self._vec_f = _vec_f
+
         self._unvec_f = np.vectorize(self.index_to_word.__getitem__, otypes=[np.str_])
 
         # sanity checks
         assert len(self.index_to_word) == len(self.word_to_index)
+        assert len(self.index_to_word) == max(self.index_to_word.keys()) + 1
         assert self._vec_f("THIS_TOKEN_DEFINITELY_DOES_NOT_APPEAR") == oov_index
         assert self._vec_f(PADDING_TOKEN) == 0
         assert self._vec_f("the") == n_special # most common word is first index after special tokens
+        assert "testing" == self._unvec_f(self._vec_f("testing")) # make sure they are inverses
 
     def vectorize(self, array):
         """

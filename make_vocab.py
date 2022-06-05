@@ -22,7 +22,6 @@ def make_vocab():
     all_words = pd.concat([data.simple, data.normal]).explode()
 
     df = all_words.value_counts(sort=True, ascending=False)
-    df = df.drop(NUMERIC_TOKEN) # drop special numeric token
     df = df.reset_index()
     df.columns = ["word", "count"]
 
