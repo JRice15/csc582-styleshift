@@ -74,7 +74,8 @@ class TextVectorizer:
             if re.fullmatch(self.IS_NUMERIC, word):
                 return num_index
             # default to OOV for words not in map
-            self.word_to_index.get(x, oov_index)
+            return self.word_to_index.get(word, oov_index)
+            
         self._vec_f = _vec_f
 
         self._unvec_f = np.vectorize(self.index_to_word.__getitem__, otypes=[np.str_])
