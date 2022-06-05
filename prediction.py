@@ -296,7 +296,7 @@ def interpolate_OOV_predictions(preds, x_raw, attn):
             # collect the actual strings from those indices
             top_attn = raw_i[top_attn_indicies]
             # combine
-            oov_mask = (pred_i == OOV_TOKEN) | (pred == NUMERIC_TOKEN)
+            oov_mask = (pred_i == OOV_TOKEN) | (pred_i == NUMERIC_TOKEN)
             result = np.where(oov_mask, top_attn, pred_i)
         else:
             result = pred_i
