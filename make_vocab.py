@@ -19,26 +19,24 @@ def make_vocab():
     data.simple = data.simple.apply(tok.tokenize_sent)
     data.normal = data.normal.apply(tok.tokenize_sent)
 
-    vocab = np.concatenate(pd.concat([data.simple, data.normal]).to_list())
-    words, counts = np.unique(vocab, return_counts=True)
+    all_words = pd.concat([data.simple, data.normal]).explode()
 
-    df = pd.DataFrame({"word": words, "count": counts})
-    # remove special NUM token
-    df = df[df["word"] != NUMERIC_TOKEN]
+    df = all_words.value_counts(sort=True, ascending=False)
+    df = df.drop(NUMERIC_TOKEN) # drop special numeric token
+    df = df.reset_index()
+    df.columns = ["word", "count"]
 
     print("unique tokens:", len(df))
 
     # drop words that only appear once
     df = df[df["count"] > 1]
-    print("dropping words with count == 1:", len(df))
+    print("dropping words with count == 1:", len(df), "remain")
 
     print("words with count >= 3:", len(df[df["count"] >= 3]))
     print("words with count >= 4:", len(df[df["count"] >= 4]))
     print("words with count >= 5:", len(df[df["count"] >= 5]))
     print("words with count >= 10:", len(df[df["count"] >= 10]))
     print("words with count >= 100:", len(df[df["count"] >= 100]))
-
-    df = df.sort_values(by="count", ascending=False)
 
     print(df)
 

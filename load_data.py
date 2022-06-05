@@ -74,7 +74,8 @@ def read_vocab(min_count=None):
     if not os.path.exists("data/vocab.csv"):
         from make_vocab import make_vocab
         make_vocab()
-    df = pd.read_csv("data/vocab.csv")
+    # don't interpret the valid vocab words 'nan' and 'null' as missing values
+    df = pd.read_csv("data/vocab.csv", na_filter=False) 
     if min_count is not None:
         df = df[df["count"] >= min_count]
     return df["word"].to_list()
