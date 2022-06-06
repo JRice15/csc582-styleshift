@@ -101,7 +101,7 @@ def compute_preds(model, vectorizer, method, *, x_test, x_test_raw):
     return final_preds
 
 def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
-    os.makedirs(ARGS.dir + "bleu/")
+    os.makedirs(ARGS.dir + "bleu/", exist_ok=True)
     # get caches CSV with results, or update it
     csv_file = ARGS.dir + f"bleu/preds_subsampled{ARGS.subsample}x.csv"
     if os.path.exists(csv_file):
