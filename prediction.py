@@ -87,7 +87,9 @@ def greedy_predict(transformer, input_tokens, attn_key, batchsize=4):
     all_preds = tf.concat(all_preds, axis=0)
     all_attn = tf.concat(all_attn, axis=0)
 
-    return all_preds, all_attn
+    return {
+        "greedy": (all_preds, all_attn)
+    }
 
 
 PAD_VEC = get_vectorized_special(PADDING_TOKEN, as_tf=False)
@@ -151,14 +153,21 @@ class Beam:
 
 
 
-def beam_search_predict_one(transformer, input_tokens, *, attn_key, beam_size, alpha, ngram_blocking):
+def beam_search_predict_one(transformer, input_tokens, *, attn_key, beam_size, 
+        alpha, ngram_blocking):
     """
     run beam search on one sentence. per https://arxiv.org/pdf/1609.08144.pdf
     args:
         input_tokens: shape (1, MAX_SENT_LEN)
     returns:
-        prediction: shape (1, MAX_SENT_LEN)
-        attn: shape (n_heads, MAX_SENT_LEN-1, MAX_SENT_LEN)
+        tuple(
+            prediction: shape (1, MAX_SENT_LEN)
+            attn: shape (n_heads, MAX_SENT_LEN-1, MAX_SENT_LEN)
+        ),
+        tuple(
+            prediction_no_copy: prediction, which disallows copying the input, (1, MAX_SENT_LEN)
+            attn_no_copy: shape (n_heads, MAX_SENT_LEN-1, MAX_SENT_LEN)
+        )
     """
     assert input_tokens.shape[0] == 1 # batchsize 1 for now
 
@@ -235,13 +244,16 @@ def beam_search_predict_one(transformer, input_tokens, *, attn_key, beam_size, a
         # disallow copying the input
         if (beam_arr == input_tokens).all():
             complete_beams.remove(best_beam)
-            best_beam = max(complete_beams, key=lambda x: x.score)
-            beam_arr = best_beam.as_np_array()
-        return beam_arr, best_beam.attn
+            no_copy_beam = max(complete_beams, key=lambda x: x.score)
+            no_copy_arr = best_beam.as_np_array()
+        else:
+            no_copy_arr = beam_arr
+            no_copy_beam = best_beam.attn
+        return (beam_arr, best_beam.attn), (no_copy_arr, no_copy_beam.attn)
     except ValueError: # max of empty sequence
         # default to copying the input if no good beams are found
         print("No good beam!")
-        return input_tokens, np.zeros(attn_shape)
+        return (input_tokens, np.zeros(attn_shape)), (input_tokens, np.zeros(attn_shape))
 
 
 
@@ -249,19 +261,30 @@ def beam_search_sentences(transformer, sentences, *, attn_key, beam_size=4, alph
         ngram_blocking=3):
     """
     returns:
+        dict mapping to multiple pred-set tuple, which consist of:
         preds: shape (n sents, MAX_SENT_LEN)
         attns: shape (n sents, n heads, MAX_SENT_LEN-1, MAX_SENT_LEN)
     """
     preds = []
     attns = []
+    preds_nc = []
+    attns_nc = []
     for sent in tqdm(sentences):
-        pred, attn = beam_search_predict_one(transformer, sent[np.newaxis], beam_size=beam_size, 
+        result = beam_search_predict_one(transformer, sent[np.newaxis], beam_size=beam_size, 
                 alpha=alpha, ngram_blocking=ngram_blocking, attn_key=attn_key)
+        (pred, attn), (nc_pred, nc_attn) = result
         preds.append(pred)
         attns.append(attn)
+        preds_nc.append(nc_pred)
+        attns_nc.append(nc_attn)
     preds = np.concatenate(preds, axis=0)
     attns = np.stack(attns, axis=0)
-    return preds, attns
+    preds_nc = np.concatenate(preds_nc, axis=0)
+    attns_nc = np.stack(attns_nc, axis=0)
+    return {
+        "beam": (preds, attns), 
+        "beam_nocopy": (preds_nc, attn_nc),
+    }
 
 
 
@@ -288,9 +311,6 @@ def interpolate_OOV_predictions(preds, x_raw, attn):
         if OOV_TOKEN in pred_i or NUMERIC_TOKEN in pred_i:
             raw_i = x_raw[sent_idx]
             attn_i = attn[sent_idx]
-            # no attention to start/end
-            start_end_mask = (raw_i == START_TOKEN) | (raw_i == END_TOKEN)
-            attn_i[:,start_end_mask] = 0
             # get, for each sentence, for each word generated, what index in the input was paid the most attention
             top_attn_indicies = np.argmax(attn_i, axis=-1)
             # collect the actual strings from those indices

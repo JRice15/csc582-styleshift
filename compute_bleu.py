@@ -54,48 +54,57 @@ def sents_to_strings(sents):
 def sents_from_strings(sents):
     return [x.split() for x in sents]
 
+
+def unpreprocess_preds(preds, *, vectorizer, x_test_raw, attn):
+    # convert ints to strings
+    preds = vectorizer.unvectorize(preds)
+    # turn OOV to real words
+    preds = prediction.interpolate_OOV_predictions(preds, x_test_raw, attn)
+    # strip start/end tokens, padding
+    preds = prediction.to_final_sentences(preds)
+    return preds
+
 def compute_preds(model, vectorizer, method, *, x_test, x_test_raw):
     print("Computing predictions with", method, "search...")
     last_layer = TRAIN_PARAMS["n_layers"] - 1
     if method == "greedy":
-        preds, attn = prediction.greedy_predict(
-                                model, 
-                                x_test, 
-                                batchsize=ARGS.batchsize,
-                                attn_key=f"decoder_layer{last_layer}_attn2_weights",
-                            )
-        attn = attn.numpy()
+        results = prediction.greedy_predict(
+            model, 
+            x_test, 
+            batchsize=ARGS.batchsize,
+            attn_key=f"decoder_layer{last_layer}_attn2_weights",
+        )
 
     elif method == "beam":
-        preds, attn = prediction.beam_search_sentences(
-                        model, 
-                        x_test, 
-                        beam_size=4,
-                        alpha=0.6,
-                        ngram_blocking=3,
-                        attn_key=f"decoder_layer{last_layer}_attn2_weights",
-                    )
+        results = prediction.beam_search_sentences(
+            model, 
+            x_test, 
+            beam_size=4,
+            alpha=0.6,
+            ngram_blocking=3,
+            attn_key=f"decoder_layer{last_layer}_attn2_weights",
+        )
 
     else:
         raise ValueError("Unknown method")
 
-    # convert ints to strings
-    preds = vectorizer.unvectorize(preds)
+    final_preds = {}
+    for key,(pred,attn) in results.items():
+        try:
+            attn = attn.numpy()
+        except AttributeError:
+            pass
+        final = unpreprocess_preds(pred, vectorizer=vectorizer, 
+                x_test_raw=x_test_raw, attn=attn)
+        final_preds[key] = final
 
-    # turn OOV to real words
-    preds = prediction.interpolate_OOV_predictions(preds, x_test_raw, attn)
-
-    # strip start/end tokens, padding
-    preds = prediction.to_final_sentences(preds)
-
-    return preds
+    return final_preds
 
 def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     # get caches CSV with results, or update it
     csv_file = ARGS.dir + f"bleu/preds_subsampled{ARGS.subsample}x.csv"
     if os.path.exists(csv_file):
         pred_df = pd.read_csv(csv_file)
-        raw_inputs = sents_from_strings(pred_df["inputs"].to_list())
         refs = sents_from_strings(pred_df["refs"].to_list())
 
     else:
@@ -106,20 +115,14 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
             "inputs": sents_to_strings(raw_inputs),
             "refs": sents_to_strings(refs),
         })
-
-    method_key = "pred_"+method
-    if method_key not in pred_df.columns:
-        preds = compute_preds(model, vectorizer, method=method, x_test=x_test, x_test_raw=x_test_raw)
-        pred_df[method_key] = sents_to_strings(preds)
-        pred_df.to_csv(csv_file, index=False)
-    else:
-        preds = sents_from_strings(pred_df[method_key].to_list())
-    
-    # compute bleu of just copying the inputs
     refs = [[x] for x in refs] # nltk wants a list of refs for each pred
-    inputs_bleu = nltk.translate.bleu_score.corpus_bleu(refs, raw_inputs)
-    # compute our bleu
-    our_bleu = nltk.translate.bleu_score.corpus_bleu(refs, preds)
+
+    # compute predictions if not present
+    if method not in pred_df.columns:
+        computed = compute_preds(model, vectorizer, method=method, x_test=x_test, x_test_raw=x_test_raw)
+        for name,pred in computed.items():
+            pred_df[name] = sents_to_strings(pred)
+        pred_df.to_csv(csv_file, index=False)
 
     # initialize or update bleu score results
     result_file = ARGS.dir + f"bleu/bleu_subsampled{ARGS.subsample}x.json"
@@ -129,9 +132,12 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     else:
         results = {}
 
-    results["bleu_" + method] = our_bleu
-    results["bleu_inputs"] = inputs_bleu
     results["total_examples"] = len(x_test_raw)
+
+    # compute bleu for all methods
+    for col in pred_df.columns:
+        data = sents_from_strings(pred_df[col].to_list())
+        results["bleu_" + col] = nltk.translate.bleu_score.corpus_bleu(refs, data)
 
     pprint(results)
 
