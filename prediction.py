@@ -283,7 +283,7 @@ def beam_search_sentences(transformer, sentences, *, attn_key, beam_size=4, alph
     attns_nc = np.stack(attns_nc, axis=0)
     return {
         "beam": (preds, attns), 
-        "beam_nocopy": (preds_nc, attn_nc),
+        "beam_nocopy": (preds_nc, attns_nc),
     }
 
 
