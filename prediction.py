@@ -245,10 +245,10 @@ def beam_search_predict_one(transformer, input_tokens, *, attn_key, beam_size,
         if (beam_arr == input_tokens).all():
             complete_beams.remove(best_beam)
             no_copy_beam = max(complete_beams, key=lambda x: x.score)
-            no_copy_arr = best_beam.as_np_array()
+            no_copy_arr = no_copy_beam.as_np_array()
         else:
             no_copy_arr = beam_arr
-            no_copy_beam = best_beam.attn
+            no_copy_beam = best_beam
         return (beam_arr, best_beam.attn), (no_copy_arr, no_copy_beam.attn)
     except ValueError: # max of empty sequence
         # default to copying the input if no good beams are found
