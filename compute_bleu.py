@@ -52,7 +52,7 @@ def sents_to_strings(sents):
     return [" ".join(x) for x in sents]
 
 def sents_from_strings(sents):
-    return [x.split() for x in sents]
+    return [str(x).split() for x in sents]
 
 
 def unpreprocess_preds(preds, *, vectorizer, x_test_raw, attn):
