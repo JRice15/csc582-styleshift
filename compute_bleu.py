@@ -130,7 +130,11 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
         with open(result_file, "r") as f:
             results = json.load(f)
     else:
-        results = {}
+        results = {
+            "bleu": {},
+            "pct_copy": {},
+            "pct_correct": {},
+        }
 
     results["total_examples"] = len(x_test_raw)
 
@@ -138,13 +142,13 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     nltk_refs = [[x] for x in refs] # nltk wants a list of refs for each pred
     for col in pred_df.columns:
         preds = sents_from_strings(pred_df[col].to_list())
-        results["bleu_" + col] = nltk.translate.bleu_score.corpus_bleu(nltk_refs, preds)
+        results["bleu"][col] = nltk.translate.bleu_score.corpus_bleu(nltk_refs, preds)
         # compute pct copies inputs
         pct_copy = np.mean([pred == inpt for pred,inpt in zip(preds, raw_inputs)])
-        results["pct_copy_" + col] = float(pct_copy)
+        results["pct_copy"][col] = float(pct_copy)
         # compute pct exact correct
         pct_exact = np.mean([pred == targ for pred,targ in zip(preds, refs)])
-        results["pct_correct" + col] = float(pct_exact)
+        results["pct_correct"][col] = float(pct_exact)
 
     pprint(results)
 
