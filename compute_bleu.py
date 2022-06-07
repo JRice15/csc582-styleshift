@@ -102,20 +102,21 @@ def compute_preds(model, vectorizer, method, *, x_test, x_test_raw):
 
 def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     os.makedirs(ARGS.dir + "bleu/", exist_ok=True)
+
     # get caches CSV with results, or update it
     csv_file = ARGS.dir + f"bleu/preds_subsampled{ARGS.subsample}x.csv"
     if os.path.exists(csv_file):
         pred_df = pd.read_csv(csv_file)
+        raw_inputs = sents_from_strings(preds_df["inputs"].to_list())
         refs = sents_from_strings(pred_df["refs"].to_list())
-
     else:
         raw_inputs = prediction.to_final_sentences(x_test_raw)
         refs = prediction.to_final_sentences(y_test_raw)
-
         pred_df = pd.DataFrame({
             "inputs": sents_to_strings(raw_inputs),
             "refs": sents_to_strings(refs),
         })
+
     refs = [[x] for x in refs] # nltk wants a list of refs for each pred
 
     # compute predictions if not present
@@ -137,8 +138,14 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
 
     # compute bleu for all methods
     for col in pred_df.columns:
-        data = sents_from_strings(pred_df[col].to_list())
-        results["bleu_" + col] = nltk.translate.bleu_score.corpus_bleu(refs, data)
+        preds = sents_from_strings(pred_df[col].to_list())
+        results["bleu_" + col] = nltk.translate.bleu_score.corpus_bleu(refs, preds)
+        # compute pct copies inputs
+        pct_copy = np.mean([pred == inpt for pred,inpt in zip(preds, raw_inputs)])
+        results["pct_copy_" + col] = float(pct_copy)
+        # compute pct exact correct
+        pct_exact = np.mean([pred == targ for pred,(targ,) in zip(preds, refs)])
+        results["pct_correct" + col] = float(pct_exact)
 
     pprint(results)
 
