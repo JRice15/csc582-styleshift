@@ -32,7 +32,7 @@ PRESETS = {
     "dropout": 0.1,
     "min_word_freq": 3,
   },
-  "medium": {
+  "medium": { # 'Reduced' in the paper
     "n_layers": 2,
     "d_model": 128,
     "d_ff": 512,
@@ -41,15 +41,15 @@ PRESETS = {
     "dropout": 0.1,
     "min_word_freq": 3,
   },
-  "small": {
-    "n_layers": 1,
-    "d_model": 50,
-    "d_ff": 64,
-    "n_heads": 2,
-    "d_key": 32,
-    "dropout": 0.1,
-    "min_word_freq": 10,
-  },
+  # "small": {
+  #   "n_layers": 1,
+  #   "d_model": 50,
+  #   "d_ff": 64,
+  #   "n_heads": 2,
+  #   "d_key": 32,
+  #   "dropout": 0.1,
+  #   "min_word_freq": 10,
+  # },
   # Baseline in Vaswani et al https://arxiv.org/pdf/1706.03762.pdf
   "orig": {
     "n_layers": 6,

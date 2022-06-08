@@ -55,50 +55,6 @@ def sents_from_strings(sents):
     return [str(x).split() for x in sents]
 
 
-def unpreprocess_preds(preds, *, vectorizer, x_test_raw, attn):
-    # convert ints to strings
-    preds = vectorizer.unvectorize(preds)
-    # turn OOV to real words
-    preds = prediction.interpolate_OOV_predictions(preds, x_test_raw, attn)
-    # strip start/end tokens, padding
-    preds = prediction.to_final_sentences(preds)
-    return preds
-
-def compute_preds(model, vectorizer, method, *, x_test, x_test_raw):
-    print("Computing predictions with", method, "search...")
-    last_layer = TRAIN_PARAMS["n_layers"] - 1
-    if method == "greedy":
-        results = prediction.greedy_predict(
-            model, 
-            x_test, 
-            batchsize=ARGS.batchsize,
-            attn_key=f"decoder_layer{last_layer}_attn2_weights",
-        )
-
-    elif method == "beam":
-        results = prediction.beam_search_sentences(
-            model, 
-            x_test, 
-            beam_size=4,
-            alpha=0.6,
-            ngram_blocking=3,
-            attn_key=f"decoder_layer{last_layer}_attn2_weights",
-        )
-
-    else:
-        raise ValueError("Unknown method")
-
-    final_preds = {}
-    for key,(pred,attn) in results.items():
-        try:
-            attn = attn.numpy()
-        except AttributeError:
-            pass
-        final = unpreprocess_preds(pred, vectorizer=vectorizer, 
-                x_test_raw=x_test_raw, attn=attn)
-        final_preds[key] = final
-
-    return final_preds
 
 def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
     os.makedirs(ARGS.dir + "bleu/", exist_ok=True)
@@ -117,9 +73,12 @@ def compute_bleu(model, vectorizer, method, *, x_test, x_test_raw, y_test_raw):
             "refs": sents_to_strings(refs),
         })
 
+    last_layer = TRAIN_PARAMS["n_layers"]-1
+    attn_key = f"decoder_layer{last_layer}_attn2_weights"
     # compute predictions if not present
     if method not in pred_df.columns:
-        computed = compute_preds(model, vectorizer, method=method, x_test=x_test, x_test_raw=x_test_raw)
+        computed = prediction.compute_preds(model, vectorizer, method=method, 
+                        x_test=x_test, x_test_raw=x_test_raw, attn_key=attn_key)
         for name,pred in computed.items():
             pred_df[name] = sents_to_strings(pred)
         pred_df.to_csv(csv_file, index=False)

@@ -42,6 +42,28 @@ class TextTokenizer:
         return words
 
 
+class TextPadder:
+    """
+    convert lists of strings to array of str of uniform length, shape (n sents, max_sent_len)
+    """
+
+    def __init__(self, padding="post", truncating="post"):
+        self.where_pad = padding
+        self.where_truncate = truncating
+        self.str_dtype = np.dtype("U" + str(MAX_WORD_LEN))
+
+    def pad_sents(self, sents):
+        return pad_sequences(
+                sents,
+                maxlen=MAX_SENT_LEN,
+                dtype=self.str_dtype, # max 50 letters in a word 
+                value=PADDING_TOKEN,
+                padding=self.where_pad,
+                truncating=self.where_truncate,
+            )
+
+
+
 class TextVectorizer:
     """
     maps np.array of strings to np.array of ints
@@ -69,14 +91,14 @@ class TextVectorizer:
 
         oov_index = self.word_to_index[OOV_TOKEN]
         num_index = self.word_to_index[NUMERIC_TOKEN]
-        @np.vectorize
+
         def _vec_f(word):
             if re.fullmatch(self.IS_NUMERIC, word):
                 return num_index
             # default to OOV for words not in map
             return self.word_to_index.get(word, oov_index)
             
-        self._vec_f = _vec_f
+        self._vec_f = np.vectorize(_vec_f, otypes=[np.int32])
 
         self._unvec_f = np.vectorize(self.index_to_word.__getitem__, otypes=[np.str_])
 
@@ -155,23 +177,11 @@ def load_preprocessed_sent_data(target, drop_equal=False, start_end_tokens=False
         print("example tokenized:")
         print(" ", data.normal.iloc[8192])
 
-    str_dtype = np.dtype("U" + str(MAX_WORD_LEN))
-    X_normal = pad_sequences(
-                data.normal.to_list(),
-                maxlen=MAX_SENT_LEN,
-                dtype=str_dtype, # max 50 letters in a word 
-                value=PADDING_TOKEN,
-                padding="post",
-                truncating="post",
-            )
-    X_simple = pad_sequences(
-                data.simple.to_list(),
-                maxlen=MAX_SENT_LEN,
-                dtype=str_dtype,
-                value=PADDING_TOKEN,
-                padding="post",
-                truncating="post",
-            )
+    padder = TextPadder()
+
+    X_normal = padder.pad_sents(data.normal.to_list())
+    X_simple = padder.pad_sents(data.simple.to_list())
+
     if return_raw_test:
         raw_data = (X_normal, X_simple)
 

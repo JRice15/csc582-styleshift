@@ -175,7 +175,11 @@ def beam_search_predict_one(transformer, input_tokens, *, attn_key, beam_size,
     end = get_vectorized_special(END_TOKEN, as_tf=False)
     pad = get_vectorized_special(PADDING_TOKEN, as_tf=False)
 
-    input_tokens = input_tokens.numpy()
+    try:
+        input_tokens = input_tokens.numpy()
+    except AttributeError:
+        assert isinstance(input_tokens, np.ndarray)
+        
     if end in input_tokens:
         input_len = (input_tokens[0] == end).nonzero()[0][0]
     else:
@@ -343,4 +347,56 @@ def to_final_sentences(sentences):
         result.append(sent)
     return result
 
+
+
+def unpreprocess_preds(preds, *, vectorizer, x_test_raw, attn):
+    # convert ints to strings
+    preds = vectorizer.unvectorize(preds)
+    # turn OOV to real words
+    preds = interpolate_OOV_predictions(preds, x_test_raw, attn)
+    # strip start/end tokens, padding
+    preds = to_final_sentences(preds)
+    return preds
+
+def compute_preds(model, vectorizer, method, *, x_test, x_test_raw, attn_key):
+    """
+    compute final predicted sentence from inputs, using the given decoding method
+    args:
+        method: "greedy"|"beam"
+    returns:
+        dict: maps method name to final sentences
+    """
+    print("Computing predictions with", method, "search...")
+    if method == "greedy":
+        results = greedy_predict(
+            model, 
+            x_test, 
+            batchsize=ARGS.batchsize,
+            attn_key=attn_key,
+        )
+
+    elif method == "beam":
+        results = beam_search_sentences(
+            model, 
+            x_test, 
+            beam_size=4,
+            alpha=0.6,
+            ngram_blocking=3,
+            attn_key=attn_key,
+        )
+
+    else:
+        raise ValueError("Unknown method")
+
+    final_preds = {}
+    for key,(pred,attn) in results.items():
+        try:
+            attn = attn.numpy()
+        except AttributeError:
+            pass
+        final = unpreprocess_preds(pred, vectorizer=vectorizer, 
+                x_test_raw=x_test_raw, attn=attn)
+        final_preds[key] = final
+
+    return final_preds
 
